@@ -10,8 +10,9 @@ either direction is visible:
    time**, untrusted parsers, and **networklessness**.
 
 Cross-referencing the two is the point. Guards G1-G12 all have a doc
-requirement; two doc requirements have **no decode guard at all** and are
-recorded as nulls rather than quietly omitted.
+requirement. Two doc requirements had **no decode guard at all**: frame count,
+since closed by G13 in tests/test_frame_count.py, and decode time, which
+remains a recorded null.
 
 **Mutation table, written before the controls.** Each row states what must break
 the control. A control whose mutation cannot be shown to fire is worth nothing.
@@ -315,13 +316,14 @@ def test_decode_opens_no_socket(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
 
 # --- recorded nulls --------------------------------------------------------
-def test_null_no_frame_count_guard_exists(tmp_path: Path) -> None:
-    """RECORDED NULL, not a pass.
+def test_frame_count_null_is_now_closed(tmp_path: Path) -> None:
+    """This was a recorded NULL and is now a guard - see tests/test_frame_count.py.
 
-    The design document requires rejecting inputs by **frame count**. No such
-    guard exists in decode.py, and a multi-frame input decodes as its first
-    frame with the remaining frames silently ignored. This test pins the
-    current behaviour so the gap is visible and cannot be closed by accident.
+    The null as first written understated the exposure. It observed that a GIF
+    is refused by media type and inferred the gap was bounded. It is not: TIFF
+    and WebP are accepted media types and both carry frames natively, so a
+    30-frame TIFF decoded as frame 0 with 29 frames discarded silently. The
+    correction is recorded rather than quietly replaced.
     """
     animated = tmp_path / "n.gif"
     frames = []
@@ -331,8 +333,10 @@ def test_null_no_frame_count_guard_exists(tmp_path: Path) -> None:
     frames[0].save(animated, format="GIF", save_all=True, append_images=frames[1:], duration=10)
     with Image.open(animated) as opened:
         assert getattr(opened, "n_frames", 1) == 24
-    source = _describe(animated, media_type="image/gif")
-    failure = _refusal(source)
-    # It is refused only because GIF is not an accepted media type - never
-    # because of its frame count.
-    assert failure.code == "background.input-unreadable"
+    # The frame guard now runs before the media-type comparison, so an animated
+    # GIF is refused as a frame-limit violation rather than an unknown media
+    # type. That ordering is deliberate: frame count is a property of the bytes,
+    # and it names the actual reason the input cannot be used.
+    failure = _refusal(_describe(animated, media_type="image/gif"))
+    assert failure.code == "background.input-limit"
+    assert failure.safe_message == "The input frame limit is exceeded."

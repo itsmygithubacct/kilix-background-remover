@@ -21,6 +21,12 @@ FORMAT_MEDIA_TYPE = {
     "WEBP": "image/webp",
 }
 MAX_METADATA_BYTES = 1_048_576
+# The image path produces one cutout from one frame.  TIFF and WebP are both
+# accepted media types and both carry frames natively, so the media-type
+# allowlist does not bound this.  Silently using frame 0 would be data loss on
+# the user's input; offline video is F108's separate phase and will raise this
+# deliberately rather than inherit it.
+MAX_INPUT_FRAMES = 1
 
 
 @dataclass(slots=True)
@@ -85,6 +91,14 @@ def decode_image(source: ImageInput, limits: Limits) -> DecodedImage:
                         raise RemovalFailure(
                             "background.input-unreadable",
                             "The decoded geometry does not match the request.",
+                            "input",
+                            "decode",
+                        )
+                    frames = int(getattr(opened, "n_frames", 1))
+                    if frames > MAX_INPUT_FRAMES:
+                        raise RemovalFailure(
+                            "background.input-limit",
+                            "The input frame limit is exceeded.",
                             "input",
                             "decode",
                         )
