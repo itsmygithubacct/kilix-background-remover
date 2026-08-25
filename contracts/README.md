@@ -7,6 +7,6 @@ fields.
 
 `AUTHORITY-SHA256SUMS` covers every schema and golden lifecycle fixture. The
 authority manifest itself hashes to
-`7fedfa2d6223596167ae1e4c76de467cd4032b1529df41632b67acc34c68f846`.
+`7fedfa2d504fb4e27a538db54fcfcaaca33e90972748cb04b1592eed0c68f846`.
 The research freeze record is intentionally not copied into this product tree.
 

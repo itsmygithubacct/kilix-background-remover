@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -115,6 +116,22 @@ def test_frozen_contract_bytes_and_manifests() -> None:
     for line in (contract_root / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
         digest, relative = line.split("  ", 1)
         assert authority_records[relative] == digest
+
+
+def test_vendoring_note_states_the_real_authority_digest() -> None:
+    """The prose digest in contracts/README.md must equal the computed one.
+
+    It stated a digest that shared only the first eight characters with the
+    real one, so it read as verified while binding nothing. Prose that quotes
+    a digest is a pin, and an unchecked pin drifts.
+    """
+    contract_root = ROOT / "contracts"
+    computed = hashlib.sha256((contract_root / "AUTHORITY-SHA256SUMS").read_bytes()).hexdigest()
+    note = (contract_root / "README.md").read_text(encoding="utf-8")
+    quoted = re.findall(r"\b[0-9a-f]{64}\b", note)
+    assert quoted, "the vendoring note must quote the authority digest"
+    for digest in quoted:
+        assert digest == computed, f"stale digest in contracts/README.md: {digest}"
 
 
 def test_valid_authority_lifecycles(
