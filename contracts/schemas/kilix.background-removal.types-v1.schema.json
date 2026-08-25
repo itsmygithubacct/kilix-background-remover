@@ -1,0 +1,377 @@
+{
+  "$comment": "Frozen G5a v1 schema resource, 2026-08-25; incompatible changes require a new schema identity.",
+  "$defs": {
+    "absolutePath": {
+      "maxLength": 4096,
+      "minLength": 2,
+      "pattern": "^/",
+      "type": "string"
+    },
+    "background": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "const": "transparent"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "const": "color"
+            },
+            "rgba": {
+              "items": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            }
+          },
+          "required": [
+            "mode",
+            "rgba"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "$ref": "#/$defs/imageInput"
+            },
+            "mode": {
+              "const": "image"
+            }
+          },
+          "required": [
+            "image",
+            "mode"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "destinations": {
+      "additionalProperties": false,
+      "properties": {
+        "composite": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "cutout_png": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "cutout_webp": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "mask": {
+          "$ref": "#/$defs/absolutePath"
+        }
+      },
+      "required": [
+        "mask"
+      ],
+      "type": "object"
+    },
+    "edgeSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "feather_radius_px": {
+          "maximum": 4096.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "matting_mode": {
+          "enum": [
+            "alpha",
+            "none"
+          ]
+        },
+        "preserve_source_alpha": {
+          "type": "boolean"
+        },
+        "threshold": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "feather_radius_px",
+        "matting_mode",
+        "preserve_source_alpha",
+        "threshold"
+      ],
+      "type": "object"
+    },
+    "imageInput": {
+      "additionalProperties": false,
+      "properties": {
+        "alpha_mode": {
+          "enum": [
+            "opaque",
+            "premultiplied",
+            "straight"
+          ]
+        },
+        "bytes": {
+          "maximum": 2147483648,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "color_space": {
+          "enum": [
+            "display-p3",
+            "linear-srgb",
+            "rec2020-linear",
+            "srgb"
+          ]
+        },
+        "height": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "media_type": {
+          "enum": [
+            "image/jpeg",
+            "image/png",
+            "image/tiff",
+            "image/webp"
+          ]
+        },
+        "orientation_applied": {
+          "const": true
+        },
+        "path": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "sha256": {
+          "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/sha256"
+        },
+        "width": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "alpha_mode",
+        "bytes",
+        "color_space",
+        "height",
+        "media_type",
+        "orientation_applied",
+        "path",
+        "sha256",
+        "width"
+      ],
+      "type": "object"
+    },
+    "maskOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "maximum": 4294967296,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "encoding": {
+          "const": "gray8"
+        },
+        "height": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "media_type": {
+          "const": "image/png"
+        },
+        "path": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "semantics": {
+          "const": "foreground-alpha"
+        },
+        "sha256": {
+          "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/sha256"
+        },
+        "width": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bytes",
+        "encoding",
+        "height",
+        "media_type",
+        "path",
+        "semantics",
+        "sha256",
+        "width"
+      ],
+      "type": "object"
+    },
+    "model": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_sha256": {
+          "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/sha256"
+        },
+        "profile_id": {
+          "maxLength": 128,
+          "pattern": "^f108-[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_sha256",
+        "profile_id"
+      ],
+      "type": "object"
+    },
+    "renderedOutput": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "cutout-png"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "media_type": {
+                "const": "image/png"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "cutout-webp"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "media_type": {
+                "const": "image/webp"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "bytes": {
+          "maximum": 4294967296,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "height": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "composite",
+            "cutout-png",
+            "cutout-webp"
+          ]
+        },
+        "media_type": {
+          "enum": [
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/absolutePath"
+        },
+        "sha256": {
+          "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/sha256"
+        },
+        "width": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bytes",
+        "height",
+        "kind",
+        "media_type",
+        "path",
+        "sha256",
+        "width"
+      ],
+      "type": "object"
+    },
+    "settings": {
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "$ref": "#/$defs/background"
+        },
+        "edge": {
+          "$ref": "#/$defs/edgeSettings"
+        }
+      },
+      "required": [
+        "background",
+        "edge"
+      ],
+      "type": "object"
+    },
+    "sourceIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sha256": {
+          "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/sha256"
+        },
+        "width": {
+          "maximum": 100000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "height",
+        "sha256",
+        "width"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kilix:schema:kilix.background-removal.types:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

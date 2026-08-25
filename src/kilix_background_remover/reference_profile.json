@@ -1,0 +1,12 @@
+{
+  "artifact_bytes": 218,
+  "artifact_sha256": "88793d8eb097ffe7f0c4203a89dd5f78cf5f0b6ab0b42b8bc4fbe495cb73b1b6",
+  "backend": "onnxruntime-cpu",
+  "code_license": "Apache-2.0",
+  "profile_id": "f108-reference-luma-v1",
+  "purpose": "supervised-worker-and-contract-feasibility-only",
+  "release_qualified": false,
+  "schema": "kilix.background-removal.dev-profile/v1",
+  "training_data": "none",
+  "weight_license": "not-applicable-no-trained-weights"
+}

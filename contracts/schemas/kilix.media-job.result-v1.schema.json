@@ -1,0 +1,49 @@
+{
+  "$comment": "Frozen G5a v1 wire contract, 2026-08-25; incompatible changes require a new schema identity.",
+  "$id": "urn:kilix:schema:kilix.media-job.result:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "committed_at": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/timestamp"
+    },
+    "diagnostic_reference": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/diagnosticReference"
+    },
+    "elapsed_ms": {
+      "maximum": 86400000,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "request_id": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/requestId"
+    },
+    "schema": {
+      "const": "kilix.media-job.result/v1"
+    },
+    "sequence": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/sequence"
+    },
+    "state": {
+      "const": "committed"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/warning"
+      },
+      "maxItems": 32,
+      "type": "array"
+    }
+  },
+  "required": [
+    "committed_at",
+    "diagnostic_reference",
+    "elapsed_ms",
+    "request_id",
+    "schema",
+    "sequence",
+    "state",
+    "warnings"
+  ],
+  "type": "object"
+}

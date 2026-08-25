@@ -1,0 +1,156 @@
+{
+  "fixture_schema": "kilix.contract-lifecycle-fixture/v1",
+  "messages": [
+    {
+      "background": {
+        "mode": "transparent"
+      },
+      "destinations": {
+        "mask": "/run/user/1000/kilix-image-shop/jobs/01234567/mask.png"
+      },
+      "edge": {
+        "feather_radius_px": 2.5,
+        "matting_mode": "none",
+        "preserve_source_alpha": true,
+        "threshold": 0.5
+      },
+      "input": {
+        "alpha_mode": "premultiplied",
+        "bytes": 183746,
+        "color_space": "linear-srgb",
+        "height": 768,
+        "media_type": "image/png",
+        "orientation_applied": true,
+        "path": "/run/user/1000/kilix-image-shop/jobs/01234567/composited-layer.png",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "width": 1024
+      },
+      "job": {
+        "limits": {
+          "deadline_ms": 120000,
+          "max_decoded_pixels": 100000000,
+          "max_input_bytes": 268435456,
+          "max_output_bytes": 536870912
+        },
+        "request_id": "01234567-89ab-4cde-8f01-23456789abcd",
+        "schema": "kilix.media-job.request/v1",
+        "submitted_at": "2026-08-25T12:00:00Z"
+      },
+      "model": {
+        "artifact_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "profile_id": "f108-u2netp-cpu"
+      },
+      "output_kinds": [
+        "mask"
+      ],
+      "schema": "kilix.background-removal.request/v1"
+    },
+    {
+      "job": {
+        "elapsed_ms": 0,
+        "estimated_remaining_ms": null,
+        "progress": 0.0,
+        "request_id": "01234567-89ab-4cde-8f01-23456789abcd",
+        "schema": "kilix.media-job.progress/v1",
+        "sequence": 0,
+        "state": "queued",
+        "updated_at": "2026-08-25T12:00:00Z"
+      },
+      "phase": "accepted",
+      "schema": "kilix.background-removal.progress/v1"
+    },
+    {
+      "job": {
+        "elapsed_ms": 40,
+        "estimated_remaining_ms": 960,
+        "progress": 0.1,
+        "request_id": "01234567-89ab-4cde-8f01-23456789abcd",
+        "schema": "kilix.media-job.progress/v1",
+        "sequence": 1,
+        "state": "loading",
+        "updated_at": "2026-08-25T12:00:00.040000Z"
+      },
+      "phase": "load-model",
+      "schema": "kilix.background-removal.progress/v1"
+    },
+    {
+      "job": {
+        "elapsed_ms": 610,
+        "estimated_remaining_ms": 390,
+        "progress": 0.55,
+        "request_id": "01234567-89ab-4cde-8f01-23456789abcd",
+        "schema": "kilix.media-job.progress/v1",
+        "sequence": 2,
+        "state": "running",
+        "updated_at": "2026-08-25T12:00:00.610000Z"
+      },
+      "phase": "infer",
+      "schema": "kilix.background-removal.progress/v1"
+    },
+    {
+      "job": {
+        "elapsed_ms": 930,
+        "estimated_remaining_ms": 70,
+        "progress": 0.9,
+        "request_id": "01234567-89ab-4cde-8f01-23456789abcd",
+        "schema": "kilix.media-job.progress/v1",
+        "sequence": 3,
+        "state": "encoding",
+        "updated_at": "2026-08-25T12:00:00.930000Z"
+      },
+      "phase": "verify-output",
+      "schema": "kilix.background-removal.progress/v1"
+    },
+    {
+      "backend": "onnxruntime-cpu",
+      "job": {
+        "committed_at": "2026-08-25T12:00:01Z",
+        "diagnostic_reference": "diag-0123456789abcdef0123456789abcdef",
+        "elapsed_ms": 1000,
+        "request_id": "01234567-89ab-4cde-8f01-23456789abcd",
+        "schema": "kilix.media-job.result/v1",
+        "sequence": 4,
+        "state": "committed",
+        "warnings": [
+          {
+            "code": "metadata-stripped",
+            "safe_message": "Input metadata was not copied to the mask."
+          }
+        ]
+      },
+      "mask": {
+        "bytes": 41232,
+        "encoding": "gray8",
+        "height": 768,
+        "media_type": "image/png",
+        "path": "/run/user/1000/kilix-image-shop/jobs/01234567/mask.png",
+        "semantics": "foreground-alpha",
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "width": 1024
+      },
+      "model": {
+        "artifact_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "profile_id": "f108-u2netp-cpu"
+      },
+      "outputs": [],
+      "request_schema": "kilix.background-removal.request/v1",
+      "schema": "kilix.background-removal.result/v1",
+      "settings": {
+        "background": {
+          "mode": "transparent"
+        },
+        "edge": {
+          "feather_radius_px": 2.5,
+          "matting_mode": "none",
+          "preserve_source_alpha": true,
+          "threshold": 0.5
+        }
+      },
+      "source": {
+        "height": 768,
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "width": 1024
+      }
+    }
+  ]
+}

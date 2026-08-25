@@ -1,0 +1,93 @@
+{
+  "$comment": "Frozen G5a v1 wire contract, 2026-08-25; incompatible changes require a new schema identity.",
+  "$id": "urn:kilix:schema:kilix.media-job.error:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "cancelled"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "category": {
+            "const": "cancellation"
+          },
+          "code": {
+            "const": "job.cancelled"
+          },
+          "retryable": {
+            "const": false
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "category": {
+      "enum": [
+        "cancellation",
+        "deadline",
+        "input",
+        "internal",
+        "output",
+        "provider",
+        "resource"
+      ]
+    },
+    "code": {
+      "maxLength": 96,
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "diagnostic_reference": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/diagnosticReference"
+    },
+    "occurred_at": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/timestamp"
+    },
+    "request_id": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/requestId"
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "safe_message": {
+      "maxLength": 512,
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema": {
+      "const": "kilix.media-job.error/v1"
+    },
+    "sequence": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/sequence"
+    },
+    "state": {
+      "enum": [
+        "cancelled",
+        "failed"
+      ]
+    }
+  },
+  "required": [
+    "category",
+    "code",
+    "diagnostic_reference",
+    "occurred_at",
+    "request_id",
+    "retryable",
+    "safe_message",
+    "schema",
+    "sequence",
+    "state"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,389 @@
+{
+  "frozen_at": "2026-08-25",
+  "generator": {
+    "path": "tools/generate_corpus.py",
+    "sha256": "d56f9eb8040a6fc35bea54e480348b7f0924fb58a8d34a1f0f57bfb6ed975293"
+  },
+  "items": [
+    {
+      "categories": [
+        "portrait",
+        "hair",
+        "thin-boundary"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 383,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "portrait-hair.mask.png",
+        "sha256": "9aa8f402944cca08f256935d9005eadeb22de260269691f88dcf8cb3295fc484",
+        "width": 128
+      },
+      "id": "portrait-hair",
+      "input": {
+        "bytes": 973,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "portrait-hair.png",
+        "sha256": "6c6fdd79f49e2741b12991761432ded1130cc00e9604261948834010b3e91de9",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "fur",
+        "difficult-edge"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 390,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "ragged-fur.mask.png",
+        "sha256": "7d2c20ecdda335ea615c001255bfffaab297e6a4c01f0b18f53bd0e22f4f7683",
+        "width": 128
+      },
+      "id": "ragged-fur",
+      "input": {
+        "bytes": 949,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "ragged-fur.png",
+        "sha256": "2f7c862ff1903bbbd9780dbf483395062ed716580de9258158ffa989fedf8ab8",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "translucent",
+        "soft-alpha"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 121,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "translucent-object.mask.png",
+        "sha256": "e77047df2895c6d38b6f872c63621c7b4fe4e82c306fae0c0046e0556cdf23cc",
+        "width": 128
+      },
+      "id": "translucent-object",
+      "input": {
+        "bytes": 382,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "translucent-object.png",
+        "sha256": "0fedc4e11d5cf630d2da7d82c9da13ba6ec4a5d1e3c32e3c4c7e802766a54818",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "product",
+        "reflective"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 123,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "reflective-product.mask.png",
+        "sha256": "29d8d7a3aa0de367ce40dca4ea07227a69ac9f97ebeb64dd61a6d8fe3a7355c9",
+        "width": 128
+      },
+      "id": "reflective-product",
+      "input": {
+        "bytes": 380,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "reflective-product.png",
+        "sha256": "dadb14ccf3f4a0b25327424eeedb138ef9b42b7131eff7fd93f6375d95b4c40f",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "plant",
+        "thin-structure"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 221,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "branching-plant.mask.png",
+        "sha256": "e36ed35da8561539205184f6a2da122890877eb4adfc40542713b25d2b4c243d",
+        "width": 128
+      },
+      "id": "branching-plant",
+      "input": {
+        "bytes": 539,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "branching-plant.png",
+        "sha256": "c31e94c6a510f47e7acbbd04b6501ad2c9a0913b22149384f010a925e5864fbd",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "vehicle"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 144,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "vehicle.mask.png",
+        "sha256": "e568057883e5fb9e325f9afc8db39cf747242613f368b9a8f2a68409357deed8",
+        "width": 128
+      },
+      "id": "vehicle",
+      "input": {
+        "bytes": 428,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "vehicle.png",
+        "sha256": "31bb8207b7bbbdee894254e9e6c4c7cadbb26a64dca011f74395a97d164b4beb",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "illustration"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 271,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "illustration.mask.png",
+        "sha256": "d144c5d0e6565390370589ef6e86ff6e0e86633c23bcc2b62b44ad68607dab4c",
+        "width": 128
+      },
+      "id": "illustration",
+      "input": {
+        "bytes": 632,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "illustration.png",
+        "sha256": "2cd37e8b6440a044e001a953d632f2cccc19a328a24089acaa785728e3f73fb3",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "low-contrast"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 206,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "low-contrast.mask.png",
+        "sha256": "de43306279091ce13cda3217bf7d1e4f399a36bb6859fb06a9a7293072e0214b",
+        "width": 128
+      },
+      "id": "low-contrast",
+      "input": {
+        "bytes": 363,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "low-contrast.png",
+        "sha256": "acbf574e517b71efc2f1da735dafd92eb8fb8488428a03013dbd0c8c131ebb5c",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "clutter"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 180,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "clutter.mask.png",
+        "sha256": "4c5fcc2a6f67046b2666712d757709c079d9741a4a0fb4c059c0f234b7384ca3",
+        "width": 128
+      },
+      "id": "clutter",
+      "input": {
+        "bytes": 36456,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "clutter.png",
+        "sha256": "b127ed025091f60b8ca048241e720394b4e9e41ec807a2b0382b31f973a39f8f",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "thin-structure"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 395,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "thin-structure.mask.png",
+        "sha256": "449a1ecb340809bc7020cec06078e9a47e11da5c21928ce6639a785ba8785574",
+        "width": 128
+      },
+      "id": "thin-structure",
+      "input": {
+        "bytes": 788,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "thin-structure.png",
+        "sha256": "72bbcfa4b6429f28f2e31bfba8bf8f3d61bcb2d975544fb5f1c782318b4761cc",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "holes"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 265,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "holes.mask.png",
+        "sha256": "397fa274e9a2d0041f101a288de2edfe392df63f965c77509e0324b79d7af464",
+        "width": 128
+      },
+      "id": "holes",
+      "input": {
+        "bytes": 631,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "holes.png",
+        "sha256": "f85ebcf5ffb3e76ef27acd5dc8a9c2a5a56da98eedb1f1ba9ebc8e14095498de",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "existing-alpha"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 206,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "existing-alpha.mask.png",
+        "sha256": "de43306279091ce13cda3217bf7d1e4f399a36bb6859fb06a9a7293072e0214b",
+        "width": 128
+      },
+      "id": "existing-alpha",
+      "input": {
+        "bytes": 523,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "existing-alpha.png",
+        "sha256": "abbc2c137ff325c0248eee1ef0a10fd28dabebf406d093d4482e54e56d3e672d",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "no-salient-object",
+        "negative"
+      ],
+      "expected": "success",
+      "ground_truth_mask": {
+        "bytes": 91,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "no-salient-object.mask.png",
+        "sha256": "c7a75e6e7a33b90926913a3e6a47edd8ff68bc05579d52a1aadd17c7c9bc9753",
+        "width": 128
+      },
+      "id": "no-salient-object",
+      "input": {
+        "bytes": 244,
+        "height": 96,
+        "media_type": "image/png",
+        "path": "no-salient-object.png",
+        "sha256": "52776c474a70ed7459cd59ccb071e419eb0652afb3c1ede35d972006fccd7f78",
+        "width": 128
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "large",
+        "100-megapixel",
+        "bounded-tiling"
+      ],
+      "expected": "explicit-large-image-probe-only",
+      "ground_truth_mask": {
+        "bytes": 119511,
+        "height": 10000,
+        "media_type": "image/png",
+        "path": "large-100mp.mask.png",
+        "sha256": "0f7f36ded7a43447047462efe245be883d99a42d71d202abfa41d30103e19c8f",
+        "width": 10000
+      },
+      "id": "large-100mp",
+      "input": {
+        "bytes": 435592,
+        "height": 10000,
+        "media_type": "image/png",
+        "path": "large-100mp.png",
+        "sha256": "59286f3351e483050fc6a171d19d0b907505179d447f51c90f9ac1affe8b1fcd",
+        "width": 10000
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    },
+    {
+      "categories": [
+        "corrupt",
+        "negative"
+      ],
+      "expected": "typed-decode-error",
+      "ground_truth_mask": null,
+      "id": "corrupt-truncated",
+      "input": {
+        "bytes": 17,
+        "media_type": "image/png",
+        "path": "corrupt-truncated.png",
+        "sha256": "7f39d9c64d93a24dd8164c889e6ebab19f216e23ee2e0f0630ed926cf17c71a8"
+      },
+      "license": "Apache-2.0",
+      "source": "deterministic-procedural-generator"
+    }
+  ],
+  "license": "Apache-2.0",
+  "owner": "itsmygithubacct",
+  "quality_disposition": "safety-and-contract-fixtures-only; no model quality claim",
+  "schema": "kilix.background-removal.corpus/v1"
+}

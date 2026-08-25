@@ -1,0 +1,149 @@
+{
+  "fixture_schema": "kilix.contract-lifecycle-fixture/v1",
+  "messages": [
+    {
+      "background": {
+        "mode": "transparent"
+      },
+      "destinations": {
+        "cutout_png": "/run/user/1000/kilix-background-remover/jobs/abcdef01/cutout.png",
+        "mask": "/run/user/1000/kilix-background-remover/jobs/abcdef01/mask.png"
+      },
+      "edge": {
+        "feather_radius_px": 1.0,
+        "matting_mode": "alpha",
+        "preserve_source_alpha": true,
+        "threshold": 0.45
+      },
+      "input": {
+        "alpha_mode": "straight",
+        "bytes": 512000,
+        "color_space": "srgb",
+        "height": 1080,
+        "media_type": "image/png",
+        "orientation_applied": true,
+        "path": "/run/user/1000/kilix-background-remover/jobs/abcdef01/input.png",
+        "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+        "width": 1920
+      },
+      "job": {
+        "limits": {
+          "deadline_ms": 120000,
+          "max_decoded_pixels": 100000000,
+          "max_input_bytes": 268435456,
+          "max_output_bytes": 536870912
+        },
+        "request_id": "abcdef01-2345-4789-abcd-ef0123456789",
+        "schema": "kilix.media-job.request/v1",
+        "submitted_at": "2026-08-25T12:10:00Z"
+      },
+      "model": {
+        "artifact_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+        "profile_id": "f108-isnet-general-cpu"
+      },
+      "output_kinds": [
+        "cutout-png",
+        "mask"
+      ],
+      "schema": "kilix.background-removal.request/v1"
+    },
+    {
+      "job": {
+        "elapsed_ms": 0,
+        "estimated_remaining_ms": null,
+        "progress": 0.0,
+        "request_id": "abcdef01-2345-4789-abcd-ef0123456789",
+        "schema": "kilix.media-job.progress/v1",
+        "sequence": 0,
+        "state": "queued",
+        "updated_at": "2026-08-25T12:10:00Z"
+      },
+      "phase": "accepted",
+      "schema": "kilix.background-removal.progress/v1"
+    },
+    {
+      "job": {
+        "elapsed_ms": 250,
+        "estimated_remaining_ms": 750,
+        "progress": 0.35,
+        "request_id": "abcdef01-2345-4789-abcd-ef0123456789",
+        "schema": "kilix.media-job.progress/v1",
+        "sequence": 1,
+        "state": "running",
+        "updated_at": "2026-08-25T12:10:00.250000Z"
+      },
+      "phase": "infer",
+      "schema": "kilix.background-removal.progress/v1"
+    },
+    {
+      "job": {
+        "elapsed_ms": 850,
+        "estimated_remaining_ms": 150,
+        "progress": 0.85,
+        "request_id": "abcdef01-2345-4789-abcd-ef0123456789",
+        "schema": "kilix.media-job.progress/v1",
+        "sequence": 2,
+        "state": "encoding",
+        "updated_at": "2026-08-25T12:10:00.850000Z"
+      },
+      "phase": "write-output",
+      "schema": "kilix.background-removal.progress/v1"
+    },
+    {
+      "backend": "onnxruntime-cpu",
+      "job": {
+        "committed_at": "2026-08-25T12:10:01Z",
+        "diagnostic_reference": "diag-00112233445566778899aabbccddeeff",
+        "elapsed_ms": 1000,
+        "request_id": "abcdef01-2345-4789-abcd-ef0123456789",
+        "schema": "kilix.media-job.result/v1",
+        "sequence": 3,
+        "state": "committed",
+        "warnings": []
+      },
+      "mask": {
+        "bytes": 90000,
+        "encoding": "gray8",
+        "height": 1080,
+        "media_type": "image/png",
+        "path": "/run/user/1000/kilix-background-remover/jobs/abcdef01/mask.png",
+        "semantics": "foreground-alpha",
+        "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+        "width": 1920
+      },
+      "model": {
+        "artifact_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+        "profile_id": "f108-isnet-general-cpu"
+      },
+      "outputs": [
+        {
+          "bytes": 350000,
+          "height": 1080,
+          "kind": "cutout-png",
+          "media_type": "image/png",
+          "path": "/run/user/1000/kilix-background-remover/jobs/abcdef01/cutout.png",
+          "sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+          "width": 1920
+        }
+      ],
+      "request_schema": "kilix.background-removal.request/v1",
+      "schema": "kilix.background-removal.result/v1",
+      "settings": {
+        "background": {
+          "mode": "transparent"
+        },
+        "edge": {
+          "feather_radius_px": 1.0,
+          "matting_mode": "alpha",
+          "preserve_source_alpha": true,
+          "threshold": 0.45
+        }
+      },
+      "source": {
+        "height": 1080,
+        "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+        "width": 1920
+      }
+    }
+  ]
+}

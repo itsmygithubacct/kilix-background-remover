@@ -1,0 +1,9 @@
+{
+  "base": "f115-editable-mask-lifecycle.json",
+  "fixture_schema": "kilix.contract-mutation-fixture/v1",
+  "mutation": {
+    "op": "add",
+    "path": "/messages/0/command",
+    "value": "provider-defined command"
+  }
+}

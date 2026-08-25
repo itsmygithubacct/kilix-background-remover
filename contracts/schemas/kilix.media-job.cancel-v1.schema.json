@@ -1,0 +1,32 @@
+{
+  "$comment": "Frozen G5a v1 wire contract, 2026-08-25; incompatible changes require a new schema identity.",
+  "$id": "urn:kilix:schema:kilix.media-job.cancel:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "reason": {
+      "enum": [
+        "deadline",
+        "shutdown",
+        "superseded",
+        "user"
+      ]
+    },
+    "request_id": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/requestId"
+    },
+    "requested_at": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/timestamp"
+    },
+    "schema": {
+      "const": "kilix.media-job.cancel/v1"
+    }
+  },
+  "required": [
+    "reason",
+    "request_id",
+    "requested_at",
+    "schema"
+  ],
+  "type": "object"
+}

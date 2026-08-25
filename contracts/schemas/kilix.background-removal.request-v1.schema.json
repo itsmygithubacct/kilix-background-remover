@@ -1,0 +1,58 @@
+{
+  "$comment": "Frozen G5a F108/F115 v1 wire contract, 2026-08-25; incompatible changes require a new schema identity.",
+  "$id": "urn:kilix:schema:kilix.background-removal.request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "background": {
+      "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/background"
+    },
+    "destinations": {
+      "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/destinations"
+    },
+    "edge": {
+      "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/edgeSettings"
+    },
+    "input": {
+      "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/imageInput"
+    },
+    "job": {
+      "$ref": "urn:kilix:schema:kilix.media-job.request:v1"
+    },
+    "model": {
+      "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/model"
+    },
+    "output_kinds": {
+      "contains": {
+        "const": "mask"
+      },
+      "items": {
+        "enum": [
+          "composite",
+          "cutout-png",
+          "cutout-webp",
+          "mask"
+        ]
+      },
+      "maxItems": 4,
+      "minContains": 1,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema": {
+      "const": "kilix.background-removal.request/v1"
+    }
+  },
+  "required": [
+    "background",
+    "destinations",
+    "edge",
+    "input",
+    "job",
+    "model",
+    "output_kinds",
+    "schema"
+  ],
+  "type": "object"
+}

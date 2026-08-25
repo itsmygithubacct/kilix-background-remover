@@ -1,0 +1,99 @@
+{
+  "fixture_schema": "kilix.contract-lifecycle-fixture/v1",
+  "messages": [
+    {
+      "background": {
+        "mode": "transparent"
+      },
+      "destinations": {
+        "mask": "/run/user/1000/kilix-image-shop/jobs/89abcdef/mask.png"
+      },
+      "edge": {
+        "feather_radius_px": 0.0,
+        "matting_mode": "none",
+        "preserve_source_alpha": true,
+        "threshold": 0.5
+      },
+      "input": {
+        "alpha_mode": "straight",
+        "bytes": 8192,
+        "color_space": "srgb",
+        "height": 256,
+        "media_type": "image/png",
+        "orientation_applied": true,
+        "path": "/run/user/1000/kilix-image-shop/jobs/89abcdef/composited-selection.png",
+        "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "width": 256
+      },
+      "job": {
+        "limits": {
+          "deadline_ms": 30000,
+          "max_decoded_pixels": 1000000,
+          "max_input_bytes": 1048576,
+          "max_output_bytes": 1048576
+        },
+        "request_id": "89abcdef-0123-4567-89ab-cdef01234567",
+        "schema": "kilix.media-job.request/v1",
+        "submitted_at": "2026-08-25T12:05:00Z"
+      },
+      "model": {
+        "artifact_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+        "profile_id": "f108-u2netp-cpu"
+      },
+      "output_kinds": [
+        "mask"
+      ],
+      "schema": "kilix.background-removal.request/v1"
+    },
+    {
+      "job": {
+        "elapsed_ms": 0,
+        "estimated_remaining_ms": null,
+        "progress": 0.0,
+        "request_id": "89abcdef-0123-4567-89ab-cdef01234567",
+        "schema": "kilix.media-job.progress/v1",
+        "sequence": 0,
+        "state": "queued",
+        "updated_at": "2026-08-25T12:05:00Z"
+      },
+      "phase": "accepted",
+      "schema": "kilix.background-removal.progress/v1"
+    },
+    {
+      "job": {
+        "elapsed_ms": 400,
+        "estimated_remaining_ms": 600,
+        "progress": 0.45,
+        "request_id": "89abcdef-0123-4567-89ab-cdef01234567",
+        "schema": "kilix.media-job.progress/v1",
+        "sequence": 1,
+        "state": "running",
+        "updated_at": "2026-08-25T12:05:00.400000Z"
+      },
+      "phase": "infer",
+      "schema": "kilix.background-removal.progress/v1"
+    },
+    {
+      "reason": "user",
+      "request_id": "89abcdef-0123-4567-89ab-cdef01234567",
+      "requested_at": "2026-08-25T12:05:00.410000Z",
+      "schema": "kilix.media-job.cancel/v1"
+    },
+    {
+      "job": {
+        "category": "cancellation",
+        "code": "job.cancelled",
+        "diagnostic_reference": "diag-fedcba9876543210fedcba9876543210",
+        "occurred_at": "2026-08-25T12:05:00.450000Z",
+        "request_id": "89abcdef-0123-4567-89ab-cdef01234567",
+        "retryable": false,
+        "safe_message": "The background-removal job was cancelled.",
+        "schema": "kilix.media-job.error/v1",
+        "sequence": 2,
+        "state": "cancelled"
+      },
+      "phase": "infer",
+      "schema": "kilix.background-removal.error/v1"
+    }
+  ]
+}

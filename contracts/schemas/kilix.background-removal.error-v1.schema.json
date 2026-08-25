@@ -1,0 +1,57 @@
+{
+  "$comment": "Frozen G5a F108/F115 v1 wire contract, 2026-08-25; incompatible changes require a new schema identity.",
+  "$id": "urn:kilix:schema:kilix.background-removal.error:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "job": {
+      "allOf": [
+        {
+          "$ref": "urn:kilix:schema:kilix.media-job.error:v1"
+        },
+        {
+          "properties": {
+            "code": {
+              "enum": [
+                "background.artifact-invalid",
+                "background.backend-unavailable",
+                "background.deadline",
+                "background.inference-failed",
+                "background.input-limit",
+                "background.input-unreadable",
+                "background.internal",
+                "background.invalid-request",
+                "background.output-failed",
+                "background.profile-unavailable",
+                "job.cancelled"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "phase": {
+      "enum": [
+        "accepted",
+        "commit",
+        "decode",
+        "infer",
+        "load-model",
+        "postprocess",
+        "preprocess",
+        "resolve-profile",
+        "verify-output",
+        "write-output"
+      ]
+    },
+    "schema": {
+      "const": "kilix.background-removal.error/v1"
+    }
+  },
+  "required": [
+    "job",
+    "phase",
+    "schema"
+  ],
+  "type": "object"
+}

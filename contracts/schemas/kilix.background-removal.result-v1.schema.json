@@ -1,0 +1,55 @@
+{
+  "$comment": "Frozen G5a F108/F115 v1 wire contract, 2026-08-25; incompatible changes require a new schema identity.",
+  "$id": "urn:kilix:schema:kilix.background-removal.result:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "backend": {
+      "enum": [
+        "onnxruntime-cpu",
+        "onnxruntime-cuda"
+      ]
+    },
+    "job": {
+      "$ref": "urn:kilix:schema:kilix.media-job.result:v1"
+    },
+    "mask": {
+      "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/maskOutput"
+    },
+    "model": {
+      "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/model"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/renderedOutput"
+      },
+      "maxItems": 3,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "request_schema": {
+      "const": "kilix.background-removal.request/v1"
+    },
+    "schema": {
+      "const": "kilix.background-removal.result/v1"
+    },
+    "settings": {
+      "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/settings"
+    },
+    "source": {
+      "$ref": "urn:kilix:schema:kilix.background-removal.types:v1#/$defs/sourceIdentity"
+    }
+  },
+  "required": [
+    "backend",
+    "job",
+    "mask",
+    "model",
+    "outputs",
+    "request_schema",
+    "schema",
+    "settings",
+    "source"
+  ],
+  "type": "object"
+}

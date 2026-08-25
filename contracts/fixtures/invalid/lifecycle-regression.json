@@ -1,0 +1,9 @@
+{
+  "base": "f115-editable-mask-lifecycle.json",
+  "fixture_schema": "kilix.contract-mutation-fixture/v1",
+  "mutation": {
+    "op": "replace",
+    "path": "/messages/4/job/state",
+    "value": "loading"
+  }
+}

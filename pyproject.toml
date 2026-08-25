@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kilix-background-remover"
+version = "0.2.1"
+description = "Local-first bounded image cutout provider for Kilix"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = {file = "LICENSE"}
+authors = [{name = "itsmygithubacct", email = "itsmygithubacct@users.noreply.github.com"}]
+dependencies = ["Pillow==11.1.0"]
+
+[project.optional-dependencies]
+spike = ["onnx==1.20.1", "onnxruntime==1.29.0"]
+
+[dependency-groups]
+dev = [
+  "hatchling==1.27.0",
+  "jsonschema==4.25.1",
+  "mypy==1.17.1",
+  "pytest==8.4.1",
+  "pytest-cov==6.2.1",
+  "ruff==0.12.9",
+]
+
+[project.scripts]
+kilix-background-remover = "kilix_background_remover.cli:main"
+kilix-background-remover-tui = "kilix_background_remover.tui:main"
+kilix-background-remover-app-bridge = "kilix_background_remover.app_bridge:main"
+
+[tool.uv]
+required-version = "==0.12.5"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kilix_background_remover"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+packages = ["kilix_background_remover"]
+
+[[tool.mypy.overrides]]
+module = ["PIL", "PIL.*", "onnxruntime", "onnxruntime.*"]
+ignore_missing_imports = true

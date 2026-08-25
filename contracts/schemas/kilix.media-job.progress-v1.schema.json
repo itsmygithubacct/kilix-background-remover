@@ -1,0 +1,88 @@
+{
+  "$comment": "Frozen G5a v1 wire contract, 2026-08-25; incompatible changes require a new schema identity.",
+  "$id": "urn:kilix:schema:kilix.media-job.progress:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "committed"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "progress": {
+            "const": 1.0
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "diagnostic_reference": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/diagnosticReference"
+    },
+    "elapsed_ms": {
+      "maximum": 86400000,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "estimated_remaining_ms": {
+      "anyOf": [
+        {
+          "maximum": 86400000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "progress": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "type": "number"
+    },
+    "request_id": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/requestId"
+    },
+    "schema": {
+      "const": "kilix.media-job.progress/v1"
+    },
+    "sequence": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/sequence"
+    },
+    "state": {
+      "enum": [
+        "cancelled",
+        "committed",
+        "encoding",
+        "failed",
+        "loading",
+        "queued",
+        "running"
+      ]
+    },
+    "updated_at": {
+      "$ref": "urn:kilix:schema:kilix.media-job.types:v1#/$defs/timestamp"
+    }
+  },
+  "required": [
+    "elapsed_ms",
+    "estimated_remaining_ms",
+    "progress",
+    "request_id",
+    "schema",
+    "sequence",
+    "state",
+    "updated_at"
+  ],
+  "type": "object"
+}

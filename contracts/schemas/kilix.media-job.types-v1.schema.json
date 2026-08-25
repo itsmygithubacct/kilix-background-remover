@@ -1,0 +1,82 @@
+{
+  "$comment": "Frozen G5a v1 schema resource, 2026-08-25; incompatible changes require a new schema identity.",
+  "$defs": {
+    "diagnosticReference": {
+      "pattern": "^diag-[0-9a-f]{32}$",
+      "type": "string"
+    },
+    "limits": {
+      "additionalProperties": false,
+      "properties": {
+        "deadline_ms": {
+          "maximum": 86400000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_decoded_pixels": {
+          "maximum": 200000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_input_bytes": {
+          "maximum": 2147483648,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_output_bytes": {
+          "maximum": 4294967296,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "deadline_ms",
+        "max_decoded_pixels",
+        "max_input_bytes",
+        "max_output_bytes"
+      ],
+      "type": "object"
+    },
+    "requestId": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "sequence": {
+      "maximum": 4294967295,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "pattern": "Z$",
+      "type": "string"
+    },
+    "warning": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 96,
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$",
+          "type": "string"
+        },
+        "safe_message": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "safe_message"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kilix:schema:kilix.media-job.types:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
