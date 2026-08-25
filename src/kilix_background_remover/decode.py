@@ -31,7 +31,13 @@ class DecodedImage:
 
 def decode_image(source: ImageInput, limits: Limits) -> DecodedImage:
     try:
-        descriptor = os.open(source.path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        # O_NONBLOCK so a FIFO or device path returns immediately instead of
+        # blocking until a writer appears.  Without it the S_ISREG guard below
+        # is unreachable for exactly the input class it exists to refuse, and a
+        # hostile path stalls the worker until its deadline.
+        descriptor = os.open(
+            source.path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
+        )
     except OSError as exc:
         raise RemovalFailure(
             "background.input-unreadable", "The input image cannot be read.", "input", "decode"
