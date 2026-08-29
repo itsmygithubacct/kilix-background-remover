@@ -54,14 +54,20 @@ class StagedArtifact(Protocol):
     destination: Path
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class StagingPath:
-    """A private sibling file whose inode must survive an external encoder."""
+    """A private sibling file anchored open across an external encoder."""
 
     stage: Path
     destination: Path
     device: int
     inode: int
+    descriptor: int
+
+    def close(self) -> None:
+        if self.descriptor >= 0:
+            os.close(self.descriptor)
+            self.descriptor = -1
 
 
 def _check_destination(destination: Path) -> None:
@@ -92,9 +98,17 @@ def allocate_staging_path(destination: Path, *, staging_token: str) -> StagingPa
     try:
         os.fchmod(descriptor, 0o600)
         status = os.fstat(descriptor)
-    finally:
+        return StagingPath(
+            Path(temporary),
+            destination,
+            status.st_dev,
+            status.st_ino,
+            descriptor,
+        )
+    except Exception:
         os.close(descriptor)
-    return StagingPath(Path(temporary), destination, status.st_dev, status.st_ino)
+        Path(temporary).unlink(missing_ok=True)
+        raise
 
 
 def finalize_staged_file(
@@ -107,10 +121,15 @@ def finalize_staged_file(
 ) -> StagedFile:
     """Fsync and verify an encoder output without trusting its pathname."""
 
-    descriptor = -1
+    descriptor = reserved.descriptor
     try:
+        if descriptor < 0:
+            raise OSError("the staging reservation is already closed")
+        anchor = os.fstat(descriptor)
+        if not _is_reserved_inode(anchor, reserved):
+            raise OSError("the staging reservation identity changed")
         status = reserved.stage.lstat()
-        if not _is_reserved_inode(status, reserved):
+        if not _same_inode(status, anchor):
             raise OSError("the encoder replaced its reserved staging inode")
         if stat.S_IMODE(status.st_mode) != 0o600:
             raise OSError("the encoded staging file is not private")
@@ -121,9 +140,6 @@ def finalize_staged_file(
                 "resource",
                 "write-output",
             )
-        descriptor = os.open(
-            reserved.stage, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
-        )
         opened = os.fstat(descriptor)
         if not _same_snapshot(status, opened) or not _is_reserved_inode(opened, reserved):
             raise OSError("the staged output identity changed")
@@ -162,8 +178,7 @@ def finalize_staged_file(
             "verify-output",
         ) from exc
     finally:
-        if descriptor >= 0:
-            os.close(descriptor)
+        reserved.close()
 
 
 def _is_reserved_inode(status: os.stat_result, reserved: StagingPath) -> bool:
@@ -171,6 +186,15 @@ def _is_reserved_inode(status: os.stat_result, reserved: StagingPath) -> bool:
         stat.S_ISREG(status.st_mode)
         and status.st_dev == reserved.device
         and status.st_ino == reserved.inode
+    )
+
+
+def _same_inode(left: os.stat_result, right: os.stat_result) -> bool:
+    return (
+        stat.S_ISREG(left.st_mode)
+        and stat.S_ISREG(right.st_mode)
+        and left.st_dev == right.st_dev
+        and left.st_ino == right.st_ino
     )
 
 

@@ -246,6 +246,32 @@ def test_temporal_batches_match_one_pass_and_scene_cuts_do_not_bleed() -> None:
     )
 
 
+def test_production_temporal_reducer_uses_a_fixed_memory_chunk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    byte_count = video.SMOOTH_CHUNK_BYTES + 257
+    neighbours: list[Path] = []
+    for index, value in enumerate((0, 90, 255)):
+        path = tmp_path / f"mask-{index}.gray"
+        path.write_bytes(bytes([value]) * byte_count)
+        neighbours.append(path)
+    observed_reads: list[int] = []
+    read = os.read
+
+    def bounded_read(descriptor: int, requested: int) -> bytes:
+        observed_reads.append(requested)
+        return read(descriptor, requested)
+
+    monkeypatch.setattr(video.os, "read", bounded_read)
+    destination = tmp_path / "smoothed.gray"
+
+    video._write_smoothed_mask_atomic(destination, neighbours, byte_count, None)
+
+    assert observed_reads
+    assert max(observed_reads) <= video.SMOOTH_CHUNK_BYTES
+    assert destination.read_bytes() == bytes([115]) * byte_count
+
+
 def test_confirmed_estimate_binds_gif_disclosure_and_processing_settings(
     media: MediaSet,
     tmp_path: Path,
@@ -391,6 +417,71 @@ def test_encoder_failure_leaves_no_destination_or_sibling_stage(
     with pytest.raises(RemovalFailure, match="encoder died"):
         run_video(confirmed, _masker)
 
+    assert not request.destination.exists()
+    assert not list(tmp_path.glob(".kilix-f108-*.stage"))
+
+
+def test_metadata_valid_wrong_pixel_carrier_is_refused_before_atomic_commit(
+    media: MediaSet,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = VideoRequest(
+        source=media.source,
+        destination=tmp_path / "wrong-pixels.mkv",
+        output_kind=VideoOutputKind.MATTE,
+        no_audio=True,
+    )
+    _probe, estimate = estimate_video(request)
+    confirmed = replace(request, confirmation_sha256=estimate.confirmation_sha256)
+    encode_video = video._encode_video
+
+    def encode_then_replace_pixels(*args: object, **kwargs: object) -> None:
+        encode_video(*args, **kwargs)
+        stage = args[3]
+        probe = args[4]
+        assert isinstance(stage, Path)
+        assert isinstance(probe, video.VideoProbe)
+        wrong = stage.with_name(stage.name + ".wrong.mkv")
+        _ffmpeg(
+            "-i",
+            str(stage),
+            "-map",
+            "0:v:0",
+            "-an",
+            "-vf",
+            "negate",
+            "-map_metadata",
+            "-1",
+            "-map_chapters",
+            "-1",
+            "-c:v",
+            "ffv1",
+            "-level",
+            "3",
+            "-coder",
+            "1",
+            "-context",
+            "1",
+            "-pix_fmt",
+            "gray",
+            "-fps_mode",
+            "passthrough",
+            "-frames:v",
+            str(probe.frame_count),
+            "-f",
+            "matroska",
+            str(wrong),
+        )
+        stage.write_bytes(wrong.read_bytes())
+        wrong.unlink()
+
+    monkeypatch.setattr(video, "_encode_video", encode_then_replace_pixels)
+    with pytest.raises(RemovalFailure, match="pixels do not match") as caught:
+        run_video(confirmed, _masker)
+
+    assert caught.value.code == "background.output-failed"
+    assert caught.value.phase == "verify-output"
     assert not request.destination.exists()
     assert not list(tmp_path.glob(".kilix-f108-*.stage"))
 

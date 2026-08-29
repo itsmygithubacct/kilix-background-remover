@@ -39,6 +39,7 @@ from .errors import RemovalFailure
 FFMPEG = Path("/usr/bin/ffmpeg")
 FFPROBE = Path("/usr/bin/ffprobe")
 STILL_IMAGE_CODECS = frozenset({"mjpeg", "png", "tiff", "webp"})
+SMOOTH_CHUNK_BYTES = 1024 * 1024
 _PROCESS_ENV = {
     "LANG": "C",
     "LC_ALL": "C",
@@ -326,12 +327,31 @@ def estimate_video(
             "estimate",
         )
     preserve_audio = probe.audio_codec is not None and not request.no_audio
-    planes = 9
+    rendered_planes = {
+        VideoOutputKind.MATTE: 1,
+        VideoOutputKind.COMPOSITE_IMAGE: 3,
+        VideoOutputKind.COMPOSITE_VIDEO: 3,
+        VideoOutputKind.TRANSPARENT_MOV: 4,
+        VideoOutputKind.TRANSPARENT_WEBM: 4,
+        VideoOutputKind.GIF: 4,
+    }[request.output_kind]
+    # Source RGBA + raw mask + final mask + the profile's rendered raster.
+    # Keep a distinct encoded-carrier reservation because it coexists with all
+    # private inputs at the atomic publication boundary.
+    planes = 6 + rendered_planes
     if request.output_kind is VideoOutputKind.COMPOSITE_VIDEO:
         planes += 4
+    raster_pixels = probe.width * probe.height * probe.frame_count
+    encoded_reserve = min(
+        limits.max_output_bytes,
+        raster_pixels * 8 + probe.identity.bytes + 2 * 1024 * 1024,
+    )
     estimated_temp = (
         probe.identity.bytes
-        + probe.width * probe.height * probe.frame_count * planes
+        + raster_pixels * planes
+        + encoded_reserve
+        + raster_pixels // 64
+        + probe.frame_count * 4096
         + 2 * 1024 * 1024
     )
     background_kind = "none"
@@ -622,16 +642,19 @@ def run_video(
                 max_output_bytes=limits.max_output_bytes,
                 verify=lambda path: _verify_encoded(
                     path,
+                    rendered,
                     source_probe,
                     request,
                     profile,
                     estimate.preserve_audio,
                     limits,
+                    deadline,
                     cancel,
                 ),
             )
             commit_staged([staged])
         except Exception:
+            reserved.close()
             reserved.stage.unlink(missing_ok=True)
             raise
         if progress is not None:
@@ -1183,20 +1206,98 @@ def _smooth_mask_files(
             first = max(0, index - radius)
             last = min(probe.frame_count, index + radius + 1)
             neighbours = [
-                _read_exact(_mask_path(masks, candidate), frame_bytes)
+                _mask_path(masks, candidate)
                 for candidate in range(first, last)
                 if segment[candidate] == segment[index]
             ]
-            divisor = len(neighbours)
-            rounding = divisor // 2
-            smoothed = bytes(
-                (sum(neighbour[pixel] for neighbour in neighbours) + rounding) // divisor
-                for pixel in range(frame_bytes)
+            _write_smoothed_mask_atomic(
+                _mask_path(output, index),
+                neighbours,
+                frame_bytes,
+                cancel,
             )
-            _write_private_atomic(_mask_path(output, index), smoothed)
         _write_private_atomic(marker, b"complete\n")
         if progress is not None:
             progress("temporal-smooth", end, probe.frame_count)
+
+
+def _write_smoothed_mask_atomic(
+    destination: Path,
+    neighbours: Sequence[Path],
+    expected_bytes: int,
+    cancel: threading.Event | None,
+) -> None:
+    """Reduce any temporal radius with a fixed-size in-memory accumulator."""
+
+    import numpy as np
+
+    if not neighbours or expected_bytes <= 0:
+        raise ValueError("a nonempty smoothing window and geometry are required")
+    descriptors: list[int] = []
+    snapshots: list[os.stat_result] = []
+    temporary = destination.with_name(destination.name + ".partial")
+    temporary.unlink(missing_ok=True)
+    output_descriptor = -1
+    try:
+        for path in neighbours:
+            descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+            status = os.fstat(descriptor)
+            if not stat.S_ISREG(status.st_mode) or status.st_size != expected_bytes:
+                os.close(descriptor)
+                raise _video_error("A temporal mask has invalid geometry.", "resume")
+            descriptors.append(descriptor)
+            snapshots.append(status)
+        output_descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+            0o600,
+        )
+        divisor = len(descriptors)
+        rounding = divisor // 2
+        remaining = expected_bytes
+        while remaining:
+            _check_cancel(cancel, "temporal-smooth")
+            block_bytes = min(SMOOTH_CHUNK_BYTES, remaining)
+            accumulator = np.zeros(block_bytes, dtype=np.uint32)
+            for descriptor in descriptors:
+                _check_cancel(cancel, "temporal-smooth")
+                payload = _read_descriptor_exact(descriptor, block_bytes)
+                accumulator += np.frombuffer(payload, dtype=np.uint8)
+            accumulator += rounding
+            accumulator //= divisor
+            _write_all(output_descriptor, accumulator.astype(np.uint8).tobytes())
+            remaining -= block_bytes
+        for descriptor, before in zip(descriptors, snapshots, strict=True):
+            after = os.fstat(descriptor)
+            if (
+                after.st_dev != before.st_dev
+                or after.st_ino != before.st_ino
+                or after.st_size != before.st_size
+            ):
+                raise _video_error("A temporal mask changed during smoothing.", "resume")
+        os.fsync(output_descriptor)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    finally:
+        for descriptor in descriptors:
+            os.close(descriptor)
+        if output_descriptor >= 0:
+            os.close(output_descriptor)
+    os.replace(temporary, destination)
+    _fsync_directory(destination.parent)
+
+
+def _read_descriptor_exact(descriptor: int, expected_bytes: int) -> bytearray:
+    payload = bytearray()
+    while len(payload) < expected_bytes:
+        block = os.read(descriptor, expected_bytes - len(payload))
+        if not block:
+            break
+        payload.extend(block)
+    if len(payload) != expected_bytes:
+        raise _video_error("A temporal mask is truncated.", "resume")
+    return payload
 
 
 def _render_frames(
@@ -1300,6 +1401,7 @@ def _save_png_private(image: Image.Image, destination: Path) -> None:
     finally:
         os.close(descriptor)
     os.replace(temporary, destination)
+    _fsync_directory(destination.parent)
 
 
 def _write_concat_manifest(rendered: Path, durations: Sequence[Decimal]) -> Path:
@@ -1438,13 +1540,23 @@ def _encode_video(
 
 def _verify_encoded(
     path: Path,
+    rendered: Path,
     source: VideoProbe,
     request: VideoRequest,
     profile: _OutputProfile,
     preserve_audio: bool,
     limits: VideoLimits,
+    deadline: float,
     cancel: threading.Event | None,
 ) -> None:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise RemovalFailure(
+            "background.deadline",
+            "The video job exceeded its deadline.",
+            "deadline",
+            "verify-output",
+        )
     verification_limits = VideoLimits(
         max_input_bytes=max(limits.max_input_bytes, limits.max_output_bytes),
         max_output_bytes=limits.max_output_bytes,
@@ -1454,7 +1566,7 @@ def _verify_encoded(
         max_duration_seconds=limits.max_duration_seconds,
         max_probe_bytes=limits.max_probe_bytes,
         max_log_bytes=limits.max_log_bytes,
-        probe_timeout_seconds=limits.probe_timeout_seconds,
+        probe_timeout_seconds=min(limits.probe_timeout_seconds, remaining),
         job_timeout_seconds=limits.job_timeout_seconds,
         measured_frame_seconds=limits.measured_frame_seconds,
     )
@@ -1468,23 +1580,15 @@ def _verify_encoded(
         VideoOutputKind.GIF: {"gif"},
     }[request.output_kind]
     if not actual.format_names & expected_formats:
-        raise _video_error(
-            "The output container probe does not match its fixed profile.", "verify-output"
-        )
+        raise _encoded_video_error("The output container probe does not match its fixed profile.")
     if actual.video_codec != profile.codec_name:
-        raise _video_error(
-            "The output codec probe does not match its fixed profile.", "verify-output"
-        )
+        raise _encoded_video_error("The output codec probe does not match its fixed profile.")
     if (actual.width, actual.height) != (source.width, source.height):
-        raise _video_error("The output video geometry does not match the source.", "verify-output")
+        raise _encoded_video_error("The output video geometry does not match the source.")
     if actual.frame_count != source.frame_count:
-        raise _video_error(
-            "The output video frame count does not match the source.", "verify-output"
-        )
+        raise _encoded_video_error("The output video frame count does not match the source.")
     if (actual.audio_codec is not None) != preserve_audio:
-        raise _video_error(
-            "The output audio policy does not match the confirmed job.", "verify-output"
-        )
+        raise _encoded_video_error("The output audio policy does not match the confirmed job.")
     if (
         request.output_kind
         in {
@@ -1493,9 +1597,7 @@ def _verify_encoded(
         }
         and not actual.has_alpha
     ):
-        raise _video_error(
-            "The transparent output does not advertise an alpha plane.", "verify-output"
-        )
+        raise _encoded_video_error("The transparent output does not advertise an alpha plane.")
     expected_relative = [
         timestamp - source.frame_timestamps[0] for timestamp in source.frame_timestamps
     ]
@@ -1507,10 +1609,204 @@ def _verify_encoded(
         abs(expected - observed) > tolerance
         for expected, observed in zip(expected_relative, actual_relative, strict=True)
     ):
-        raise _video_error("The output video timestamps do not match the source.", "verify-output")
+        raise _encoded_video_error("The output video timestamps do not match the source.")
     duration_tolerance = max(source.frame_durations) + tolerance
     if abs(actual.duration_seconds - source.duration_seconds) > duration_tolerance:
-        raise _video_error("The output duration does not match the source.", "verify-output")
+        raise _encoded_video_error("The output duration does not match the source.")
+    _verify_rendered_pixels(path, rendered, source, request, limits, deadline, cancel)
+
+
+def _verify_rendered_pixels(
+    path: Path,
+    rendered: Path,
+    source: VideoProbe,
+    request: VideoRequest,
+    limits: VideoLimits,
+    deadline: float,
+    cancel: threading.Event | None,
+) -> None:
+    """Decode the staged carrier and compare its authoritative pixel plane."""
+
+    alpha_output = request.output_kind in {
+        VideoOutputKind.TRANSPARENT_MOV,
+        VideoOutputKind.TRANSPARENT_WEBM,
+        VideoOutputKind.GIF,
+    }
+    if request.output_kind is VideoOutputKind.MATTE or alpha_output:
+        pixel_format = "gray"
+        frame_bytes = source.width * source.height
+    else:
+        pixel_format = "rgb24"
+        frame_bytes = source.width * source.height * 3
+    argv = [
+        str(FFMPEG),
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+    ]
+    # FFmpeg's native VP9 decoder does not expose WebM alpha.  The fixed
+    # encoder/decoder pair is therefore part of this output profile.
+    if request.output_kind is VideoOutputKind.TRANSPARENT_WEBM:
+        argv.extend(["-c:v", "libvpx-vp9"])
+    argv.extend(
+        [
+            "-i",
+            str(path),
+            "-map",
+            "0:v:0",
+            "-an",
+            "-sn",
+            "-dn",
+        ]
+    )
+    if alpha_output:
+        argv.extend(["-vf", "format=rgba,alphaextract,format=gray"])
+    argv.extend(
+        [
+            "-pix_fmt",
+            pixel_format,
+            "-fps_mode",
+            "passthrough",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]
+    )
+    try:
+        process = subprocess.Popen(
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_PROCESS_ENV,
+            close_fds=True,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        raise RemovalFailure(
+            "background.backend-unavailable",
+            "The qualified FFmpeg decoder is unavailable.",
+            "provider",
+            "verify-output",
+        ) from exc
+    assert process.stdout is not None
+    assert process.stderr is not None
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+    selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+    pending = bytearray()
+    stderr = bytearray()
+    frame_index = 0
+    try:
+        while selector.get_map():
+            _check_process_deadline(process, deadline, cancel, "verify-output")
+            for key, _events in selector.select(timeout=0.05):
+                block = os.read(key.fd, 1024 * 1024)
+                if not block:
+                    selector.unregister(key.fileobj)
+                    continue
+                if key.data == "stderr":
+                    stderr.extend(block)
+                    if len(stderr) > limits.max_log_bytes:
+                        del stderr[: len(stderr) - limits.max_log_bytes]
+                    continue
+                pending.extend(block)
+                while len(pending) >= frame_bytes:
+                    if frame_index >= source.frame_count:
+                        _terminate_group(process)
+                        raise _encoded_video_error(
+                            "The output decoder produced more frames than were rendered."
+                        )
+                    actual = bytes(pending[:frame_bytes])
+                    del pending[:frame_bytes]
+                    expected = _rendered_samples(
+                        _render_path(rendered, frame_index),
+                        source.width,
+                        source.height,
+                        request.output_kind,
+                    )
+                    if not _rendered_samples_match(actual, expected, request.output_kind):
+                        _terminate_group(process)
+                        raise _encoded_video_error(
+                            "The encoded output pixels do not match the rendered frames."
+                        )
+                    frame_index += 1
+        returncode = process.wait(timeout=1.0)
+    except subprocess.TimeoutExpired as exc:
+        _terminate_group(process)
+        raise _encoded_video_error("The output decoder did not terminate safely.") from exc
+    finally:
+        selector.close()
+        process.stdout.close()
+        process.stderr.close()
+        if process.poll() is None:
+            _terminate_group(process)
+    if returncode != 0 or pending or frame_index != source.frame_count:
+        raise _encoded_video_error(
+            "The decoded output frame count does not match the rendered frames."
+        )
+
+
+def _rendered_samples_match(
+    actual: bytes,
+    expected: bytes,
+    output_kind: VideoOutputKind,
+) -> bool:
+    if len(actual) != len(expected):
+        return False
+    if output_kind not in {
+        VideoOutputKind.TRANSPARENT_MOV,
+        VideoOutputKind.TRANSPARENT_WEBM,
+    }:
+        return actual == expected
+    # Both alpha carriers rescale an 8-bit plane through their coded alpha
+    # depth.  FFmpeg's defined round trip differs by at most one u8 unit; all
+    # lossless matte/composite carriers and thresholded GIF remain exact.
+    return all(
+        abs(observed - rendered) <= 1 for observed, rendered in zip(actual, expected, strict=True)
+    )
+
+
+def _rendered_samples(
+    path: Path,
+    width: int,
+    height: int,
+    output_kind: VideoOutputKind,
+) -> bytes:
+    descriptor = -1
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode) or status.st_size <= 0:
+            raise OSError("rendered frame is not a regular file")
+        stream = os.fdopen(descriptor, "rb")
+        descriptor = -1
+        with stream, Image.open(stream) as opened:
+            opened.load()
+            if opened.size != (width, height):
+                raise OSError("rendered frame geometry changed")
+            if output_kind is VideoOutputKind.MATTE:
+                if opened.mode != "L":
+                    raise OSError("rendered matte has an invalid mode")
+                return cast(bytes, opened.tobytes())
+            if output_kind in {
+                VideoOutputKind.COMPOSITE_IMAGE,
+                VideoOutputKind.COMPOSITE_VIDEO,
+            }:
+                if opened.mode != "RGB":
+                    raise OSError("rendered composite has an invalid mode")
+                return cast(bytes, opened.tobytes())
+            if opened.mode != "RGBA":
+                raise OSError("rendered alpha frame has an invalid mode")
+            return cast(bytes, opened.getchannel("A").tobytes())
+    except (OSError, ValueError) as exc:
+        raise _encoded_video_error(
+            "A rendered frame is invalid during output verification."
+        ) from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
 def _frame_path(root: Path, index: int) -> Path:
@@ -1572,6 +1868,7 @@ def _write_private_atomic(destination: Path, payload: bytes) -> None:
     finally:
         os.close(descriptor)
     os.replace(temporary, destination)
+    _fsync_directory(destination.parent)
 
 
 def _write_all(descriptor: int, payload: bytes) -> None:
@@ -2064,4 +2361,13 @@ def _video_error(message: str, phase: str) -> RemovalFailure:
         message,
         "input",
         phase,
+    )
+
+
+def _encoded_video_error(message: str) -> RemovalFailure:
+    return RemovalFailure(
+        "background.output-failed",
+        message,
+        "output",
+        "verify-output",
     )

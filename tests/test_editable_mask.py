@@ -9,6 +9,7 @@ import struct
 import threading
 import zlib
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -19,10 +20,14 @@ from PIL import Image, PngImagePlugin
 from kilix_background_remover.contract_v2 import ContractRuntime, canonical_bytes
 from kilix_background_remover.editable_mask import (
     EditableMaskDocument,
+    EditableMaskImportPlan,
     consume_editable_mask_transcript,
     prepare_editable_mask_import,
+    run_reference_editable_mask_operation,
 )
 from kilix_background_remover.errors import RemovalFailure
+from kilix_background_remover.frontend import describe_image
+from kilix_background_remover.worker import WorkerSupervisor
 
 
 def _documents(
@@ -179,6 +184,41 @@ def test_mask_import_is_exactly_once(
     assert document.revision == 1
 
 
+def test_verified_plan_cannot_be_forged_or_mutated_before_commit(
+    tmp_path: Path,
+    request_factory: Callable[..., dict[str, object]],
+) -> None:
+    request, result, _pixels = _documents(tmp_path, request_factory)
+    plan = prepare_editable_mask_import(request, result)
+    document = _document(request)
+    changed = replace(plan, pixels=bytes(len(plan.pixels)))
+
+    with pytest.raises(RemovalFailure, match="samples changed"):
+        document.commit(changed)
+    forged = EditableMaskImportPlan(plan.pixels, plan.provenance, object())
+    with pytest.raises(RemovalFailure, match="not produced by the validator"):
+        document.commit(forged)
+
+    assert document.mask is None
+    assert document.revision == 0
+
+
+def test_committed_provenance_settings_are_immutable(
+    tmp_path: Path,
+    request_factory: Callable[..., dict[str, object]],
+) -> None:
+    request, result, _pixels = _documents(tmp_path, request_factory)
+    document = _document(request)
+    imported = document.commit(prepare_editable_mask_import(request, result))
+
+    with pytest.raises(TypeError):
+        imported.provenance.edge_settings["threshold_u8"] = 0  # type: ignore[index]
+    with pytest.raises(TypeError):
+        imported.provenance.background_settings["mode"] = "color"  # type: ignore[index]
+
+    assert imported.provenance.edge_settings == request["edge"]
+
+
 def test_ancillary_png_chunk_is_refused_even_when_digest_matches(
     tmp_path: Path,
     request_factory: Callable[..., dict[str, object]],
@@ -253,6 +293,98 @@ def test_png_expansion_past_declared_geometry_is_refused_before_import(
 
     with pytest.raises(RemovalFailure, match="expands beyond"):
         prepare_editable_mask_import(request, result)
+
+
+def test_reference_harness_submits_real_composited_layer_and_imports_provider_mask(
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "composited-layer.png"
+    width, height = 48, 32
+    pixels = bytes(
+        channel
+        for y in range(height)
+        for x in range(width)
+        for channel in (x * 5 % 256, y * 7 % 256, (x + y) * 3 % 256, 255)
+    )
+    Image.frombytes("RGBA", (width, height), pixels).save(source_path, format="PNG")
+    source_before = source_path.read_bytes()
+    identity = describe_image(source_path)
+    document = EditableMaskDocument(
+        source_sha256=identity["sha256"],  # type: ignore[arg-type]
+        width=width,
+        height=height,
+    )
+    edge = {
+        "threshold_u8": 31,
+        "feather_radius_px": 1,
+        "matting_mode": "alpha",
+        "preserve_source_alpha": True,
+    }
+
+    with WorkerSupervisor(cancellation_database=tmp_path / "cancellation.sqlite3") as provider:
+        imported = run_reference_editable_mask_operation(
+            source_path,
+            document,
+            output_dir=tmp_path,
+            provider=provider,
+            edge_settings=edge,
+        )
+
+    assert imported is not None
+    assert imported is document.mask
+    assert len(imported.pixels) == width * height
+    assert imported.provenance.edge_settings == edge
+    assert imported.provenance.source_sha256 == identity["sha256"]
+    assert source_path.read_bytes() == source_before
+    assert document.revision == 1
+
+
+def test_reference_harness_mid_operation_cancel_leaves_document_unmodified(
+    tmp_path: Path,
+) -> None:
+    source_path = tmp_path / "cancelled-composited-layer.png"
+    width, height = 128, 96
+    pixels = bytes(
+        channel
+        for y in range(height)
+        for x in range(width)
+        for channel in (x * 2 % 256, y * 2 % 256, (x + y) % 256, 255)
+    )
+    Image.frombytes("RGBA", (width, height), pixels).save(source_path, format="PNG")
+    identity = describe_image(source_path)
+    document = EditableMaskDocument(
+        source_sha256=identity["sha256"],  # type: ignore[arg-type]
+        width=width,
+        height=height,
+    )
+    cancellation = threading.Event()
+    progress: list[dict[str, object]] = []
+
+    def cancel_after_provider_started(message: dict[str, object]) -> None:
+        progress.append(message)
+        cancellation.set()
+
+    with WorkerSupervisor(cancellation_database=tmp_path / "cancel-race.sqlite3") as provider:
+        imported = run_reference_editable_mask_operation(
+            source_path,
+            document,
+            output_dir=tmp_path,
+            provider=provider,
+            edge_settings={
+                "threshold_u8": 0,
+                "feather_radius_px": 0,
+                "matting_mode": "alpha",
+                "preserve_source_alpha": True,
+            },
+            cancel=cancellation,
+            on_progress=cancel_after_provider_started,
+        )
+
+    assert progress
+    assert imported is None
+    assert document.mask is None
+    assert document.revision == 0
+    assert not list(tmp_path.glob("pane4-*.mask.png"))
 
 
 def _chunk(kind: bytes, payload: bytes) -> bytes:

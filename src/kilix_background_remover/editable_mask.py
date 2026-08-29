@@ -8,10 +8,11 @@ import stat
 import struct
 import threading
 import zlib
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, NoReturn, cast
+from types import MappingProxyType
+from typing import Any, NoReturn, Protocol, cast
 
 from .contract_v2 import (
     ContractRefusal,
@@ -24,6 +25,7 @@ from .errors import RemovalFailure
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 ALLOWED_MASK_CHUNKS = {b"IHDR", b"IDAT", b"IEND"}
+_IMPORT_PLAN_SEAL = object()
 _LOCAL_ERROR_TEXT = {
     "job.cancelled": "Background removal was cancelled.",
     "background.deadline": "Background removal timed out.",
@@ -65,12 +67,29 @@ class EditableMaskImportPlan:
 
     pixels: bytes
     provenance: EditableMaskProvenance
+    _seal: object = field(repr=False, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
 class EditableLayerMask:
     pixels: bytes
     provenance: EditableMaskProvenance
+
+
+class EditableMaskProviderOutcome(Protocol):
+    result: dict[str, object] | None
+    error: dict[str, object] | None
+    progress: list[dict[str, object]]
+
+
+class EditableMaskProvider(Protocol):
+    def run(
+        self,
+        request: object,
+        *,
+        cancel: threading.Event | None = None,
+        on_progress: Callable[[dict[str, object]], None] | None = None,
+    ) -> EditableMaskProviderOutcome: ...
 
 
 class EditableMaskDocument:
@@ -115,12 +134,33 @@ class EditableMaskDocument:
         """Attach exactly one verified mask without changing source pixels."""
 
         with self._lock:
+            if not isinstance(plan, EditableMaskImportPlan) or plan._seal is not _IMPORT_PLAN_SEAL:
+                _invalid("The editable-mask import plan was not produced by the validator.")
             provenance = plan.provenance
+            if not isinstance(provenance, EditableMaskProvenance):
+                _invalid("The editable-mask import provenance is invalid.")
             if provenance.source_sha256 != self._source_sha256 or (
                 provenance.width,
                 provenance.height,
             ) != (self._width, self._height):
                 _invalid("The editable-mask target changed before commit.")
+            if not isinstance(plan.pixels, bytes) or len(plan.pixels) != self._width * self._height:
+                _invalid("The editable-mask samples changed before commit.")
+            try:
+                for name, digest in (
+                    ("candidate_manifest_sha256", provenance.candidate_manifest_sha256),
+                    ("request_sha256", provenance.request_sha256),
+                    ("result_sha256", provenance.result_sha256),
+                    ("source_sha256", provenance.source_sha256),
+                    ("mask_sha256", provenance.mask_sha256),
+                    ("mask_samples_sha256", provenance.mask_samples_sha256),
+                    ("model_artifact_sha256", provenance.model_artifact_sha256),
+                ):
+                    _require_digest(digest, name)
+            except ValueError:
+                _invalid("The editable-mask provenance changed before commit.")
+            if hashlib.sha256(plan.pixels).hexdigest() != provenance.mask_samples_sha256:
+                _invalid("The editable-mask samples changed before commit.")
             if self._mask is not None:
                 _invalid("The editable mask was already imported.")
             _check_cancel(cancel, "commit")
@@ -172,6 +212,84 @@ def consume_editable_mask_transcript(
     if job.get("state") == "cancelled" and job.get("code") == "job.cancelled":
         return None
     raise _wire_failure(errors[0])
+
+
+def run_reference_editable_mask_operation(
+    composited_layer: Path,
+    document: EditableMaskDocument,
+    *,
+    output_dir: Path,
+    provider: EditableMaskProvider,
+    edge_settings: Mapping[str, object],
+    deadline_ms: int = 120_000,
+    cancel: threading.Event | None = None,
+    on_progress: Callable[[dict[str, object]], None] | None = None,
+    runtime: ContractRuntime | None = None,
+) -> EditableLayerMask | None:
+    """Submit one composited layer to F108 and consume its exact v2 transcript.
+
+    This is F108's in-repository pane-4 reference harness, not the external
+    F115 adapter.  The caller owns the provider session and output directory.
+    """
+
+    from .frontend import describe_image, make_request
+
+    authority = runtime or ContractRuntime.load()
+    source = describe_image(composited_layer)
+    source_sha256 = source.get("sha256")
+    width = source.get("width")
+    height = source.get("height")
+    if (
+        not isinstance(source_sha256, str)
+        or not isinstance(width, int)
+        or isinstance(width, bool)
+        or not isinstance(height, int)
+        or isinstance(height, bool)
+        or document.source_identity != (source_sha256, width, height)
+    ):
+        _invalid("The composited layer does not match the editable-mask target.")
+    request = make_request(
+        source,
+        output_dir=output_dir,
+        output_key=f"pane4-{source_sha256[:16]}",
+        output_kinds=["mask"],
+        deadline_ms=deadline_ms,
+    )
+    request["edge"] = dict(edge_settings)
+    request_wire = canonical_bytes(request)
+    try:
+        accepted_request = authority.accept_wire(request_wire)
+        validate_request_semantics(accepted_request)
+    except ContractRefusal as exc:
+        raise _failure("The pane-4 reference request is not conformant.") from exc
+
+    outcome = provider.run(
+        accepted_request,
+        cancel=cancel,
+        on_progress=on_progress,
+    )
+    progress = getattr(outcome, "progress", None)
+    result = getattr(outcome, "result", None)
+    error = getattr(outcome, "error", None)
+    if (
+        not isinstance(progress, list)
+        or not all(isinstance(message, dict) for message in progress)
+        or (isinstance(result, dict) == isinstance(error, dict))
+    ):
+        _invalid("The pane-4 reference provider returned an invalid outcome.")
+    terminal = result if isinstance(result, dict) else error
+    assert isinstance(terminal, dict)
+    wires = [
+        request_wire,
+        *(canonical_bytes(message) for message in progress),
+        canonical_bytes(terminal),
+    ]
+    return consume_editable_mask_transcript(
+        wires,
+        document,
+        cancel=None,
+        runtime=authority,
+    )
 
 
 def prepare_editable_mask_import(
@@ -286,9 +404,10 @@ def prepare_editable_mask_import(
             model_profile_id=profile_id,
             model_artifact_sha256=artifact_sha256,
             backend=_text(result, "backend"),
-            edge_settings=dict(edge),
-            background_settings=dict(background_settings),
+            edge_settings=MappingProxyType(dict(edge)),
+            background_settings=MappingProxyType(dict(background_settings)),
         ),
+        _seal=_IMPORT_PLAN_SEAL,
     )
 
 
@@ -329,6 +448,8 @@ def _decode_restrictive_gray8_png(payload: bytes, width: int, height: int) -> by
     chunks = _png_chunks(payload)
     if not chunks or chunks[0][0] != b"IHDR" or chunks[-1][0] != b"IEND":
         _invalid("The editable mask has an invalid PNG chunk order.")
+    if chunks[-1][1]:
+        _invalid("The editable mask IEND chunk is invalid.")
     names = [name for name, _data in chunks]
     if (
         names.count(b"IHDR") != 1

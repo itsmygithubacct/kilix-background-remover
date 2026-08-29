@@ -4,16 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import os
-import stat
 import uuid
-import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 
-from PIL import Image
-
 from .contract_v2 import ContractRefusal, ContractRuntime
-from .contracts import sha256_file
+from .decode import inspect_image_bounded
 from .errors import RemovalFailure
 from .worker import reference_identity
 
@@ -21,12 +17,6 @@ MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_INPUT_BYTES = 512 * 1024 * 1024
 MAX_DECODED_PIXELS = 100_000_000
 MAX_OUTPUT_BYTES = 1024 * 1024 * 1024
-MEDIA_TYPES = {
-    "JPEG": "image/jpeg",
-    "PNG": "image/png",
-    "TIFF": "image/tiff",
-    "WEBP": "image/webp",
-}
 
 
 def load_json_document(path: Path) -> object:
@@ -44,59 +34,21 @@ def load_json_document(path: Path) -> object:
 
 
 def describe_image(path: Path) -> dict[str, object]:
-    absolute = path.resolve(strict=True)
-    status = absolute.lstat()
-    if path.is_symlink() or not stat.S_ISREG(status.st_mode):
-        raise RemovalFailure(
-            "background.input-unreadable",
-            "The input must be a regular file.",
-            "input",
-            "decode",
-        )
-    if not 1 <= status.st_size <= MAX_INPUT_BYTES:
-        raise RemovalFailure(
-            "background.input-limit",
-            "The input exceeds the fixed byte limit.",
-            "resource",
-            "decode",
-        )
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", Image.DecompressionBombWarning)
-        with Image.open(absolute) as opened:
-            media_type = MEDIA_TYPES.get(opened.format or "")
-            if media_type is None:
-                raise RemovalFailure(
-                    "background.input-unreadable",
-                    "The image format is not supported.",
-                    "input",
-                    "decode",
-                )
-            width, height = opened.size
-            if width * height > 100_000_000:
-                raise RemovalFailure(
-                    "background.input-limit",
-                    "The image exceeds the 100 megapixel input bound.",
-                    "resource",
-                    "decode",
-                )
-            if int(opened.getexif().get(274, 1)) != 1:
-                raise RemovalFailure(
-                    "background.invalid-request",
-                    "Apply EXIF orientation before submitting the image.",
-                    "input",
-                    "decode",
-                )
-            alpha_mode = "straight" if "A" in opened.getbands() else "opaque"
+    inspected = inspect_image_bounded(
+        path,
+        max_input_bytes=MAX_INPUT_BYTES,
+        max_decoded_pixels=MAX_DECODED_PIXELS,
+    )
     return {
-        "path": str(absolute),
-        "sha256": sha256_file(absolute),
-        "bytes": status.st_size,
-        "width": width,
-        "height": height,
-        "media_type": media_type,
+        "path": str(inspected.path),
+        "sha256": inspected.sha256,
+        "bytes": inspected.bytes,
+        "width": inspected.width,
+        "height": inspected.height,
+        "media_type": inspected.media_type,
         "orientation_applied": True,
-        "alpha_mode": alpha_mode,
-        "color_space": "srgb",
+        "alpha_mode": inspected.alpha_mode,
+        "color_space": inspected.color_space,
     }
 
 

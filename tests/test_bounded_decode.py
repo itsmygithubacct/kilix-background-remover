@@ -11,7 +11,13 @@ import pytest
 from PIL import Image
 
 from kilix_background_remover.contracts import ImageInput, Limits
-from kilix_background_remover.decode import DecodeBudget, decode_image_bounded
+from kilix_background_remover.decode import (
+    DecodeBudget,
+    _load_sanitized_raster,
+    _parse_decode_status,
+    decode_image_bounded,
+    inspect_image_bounded,
+)
 from kilix_background_remover.errors import RemovalFailure
 
 
@@ -51,6 +57,72 @@ def test_bounded_decoder_returns_only_sanitized_pixels(tmp_path: Path) -> None:
     assert decoded.image.size == (17, 13)
     assert decoded.image.info == {}
     assert decoded.source_alpha.getextrema() == (44, 44)
+
+
+def test_long_lived_side_never_reopens_child_output_with_an_image_parser(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "source.png"
+    Image.new("RGBA", (9, 7), (4, 3, 2, 1)).save(path)
+    source = _source(path)
+
+    def forbidden_parser(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("the parent attempted to parse child-controlled image bytes")
+
+    monkeypatch.setattr(Image, "open", forbidden_parser)
+
+    decoded = decode_image_bounded(source, _limits())
+
+    assert decoded.image.tobytes() == bytes((4, 3, 2, 1)) * (9 * 7)
+
+
+def test_long_lived_frontend_never_parses_untrusted_image_headers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "source.png"
+    Image.new("RGBA", (11, 5), (4, 3, 2, 1)).save(path)
+
+    def forbidden_parser(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("the frontend attempted to parse an untrusted image")
+
+    monkeypatch.setattr(Image, "open", forbidden_parser)
+
+    inspected = inspect_image_bounded(
+        path,
+        max_input_bytes=1_000_000,
+        max_decoded_pixels=1_000_000,
+    )
+
+    assert inspected.width == 11
+    assert inspected.height == 5
+    assert inspected.media_type == "image/png"
+    assert inspected.alpha_mode == "straight"
+
+
+def test_child_status_channel_is_closed_and_bounded() -> None:
+    assert _parse_decode_status(b'{"kind":"ok"}') == {"kind": "ok"}
+    assert _parse_decode_status(b'{"kind":"ok","extra":true}') is None
+    assert _parse_decode_status(b'{"kind":"ok","kind":"limit"}') is None
+    assert _parse_decode_status(b'["ok"]') is None
+
+
+@pytest.mark.parametrize("invalid", ["symlink", "wrong-size"])
+def test_parent_refuses_invalid_raw_raster_handoffs(tmp_path: Path, invalid: str) -> None:
+    source_path = tmp_path / "source.png"
+    Image.new("RGBA", (3, 2), (1, 2, 3, 4)).save(source_path)
+    source = _source(source_path)
+    target = tmp_path / "target.rgba"
+    target.write_bytes(bytes((1, 2, 3, 4)) * 6)
+    target.chmod(0o600)
+    handoff = tmp_path / "sanitized.rgba"
+    if invalid == "symlink":
+        handoff.symlink_to(target)
+    else:
+        handoff.write_bytes(b"short")
+        handoff.chmod(0o600)
+
+    with pytest.raises(RemovalFailure, match="isolated image decoder"):
+        _load_sanitized_raster(handoff, source)
 
 
 def test_bounded_decoder_kills_a_wall_time_overrun_and_cleans_scratch(

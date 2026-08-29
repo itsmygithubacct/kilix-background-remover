@@ -51,9 +51,11 @@ present on this branch.
 
 ## Product surfaces
 
-Image decoding runs in a disposable spawned process. The default decode budget
-is 30 seconds of CPU time, 30 seconds of wall time and 2 GiB of address space;
-only a bounded, metadata-free RGBA PNG crosses back to the persistent worker.
+Image header/EXIF inspection and full decoding both run in disposable spawned
+processes. The default parser budget is 30 seconds of CPU time, 30 seconds of
+wall time and 2 GiB of address space. The long-lived side accepts only a 4 KiB
+closed JSON status record and an exact-size, mode-`0600`, metadata-free RGBA
+raster; it never unpickles child data or reparses a child-generated image.
 Image and video outputs use verified `0600` sibling staging files and a
 no-replace atomic commit.
 
@@ -82,7 +84,11 @@ respectively. GIF uses a disclosed hard alpha threshold and requires
 `--no-audio` when the source has audio. Audio is preserved by default for the
 other capable profiles; `--no-audio` explicitly removes it. Temporal smoothing,
 scene-cut isolation, batch overlap/resume, raw-frame mode, VFR timestamps and
-rotation are handled locally by the fixed `/usr/bin/ffmpeg` adapter.
+rotation are handled locally by the fixed `/usr/bin/ffmpeg` adapter. Smoothing
+uses a fixed 1 MiB accumulator independent of temporal radius. Before atomic
+publication, the staged carrier is decoded again and its authoritative mask,
+alpha, or RGB plane is compared with every rendered frame; a metadata-valid but
+pixel-wrong encoder result is refused.
 
 `kilix_background_remover.editable_mask` is the in-repository pane-4 reference
 consumer for F115. `consume_editable_mask_transcript` validates the full
@@ -90,3 +96,7 @@ candidate-R5 `/v2` transcript, all request/result identity joins and the exact
 bounded gray8 foreground-alpha PNG before `EditableMaskDocument` atomically
 attaches one full-source-geometry mask. Accepted cancellation leaves the
 document unchanged, and provider-controlled prose is never rendered.
+`run_reference_editable_mask_operation` is the executable in-repository harness:
+it submits a real composited layer through the supervised provider, retains the
+reported threshold/feather settings, validates the resulting transcript and
+commits only a sealed, sample-digest-revalidated immutable mask plan.
