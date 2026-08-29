@@ -65,7 +65,7 @@ def test_destination_is_never_observable_before_it_is_complete(tmp_path: Path) -
     The staged file is written, fsynced and re-decoded before any name appears at
     the destination, so no reader can observe a truncated or unverified image.
     """
-    destination = tmp_path / "mask.png"
+    destination = tmp_path / "cutout.png"
     staged = _stage(destination)
     observations: list[str] = []
     stop = threading.Event()
@@ -267,7 +267,7 @@ def test_enospc_during_encode_leaves_no_destination_or_staging_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A partial staging write followed by ENOSPC is fully rolled back."""
-    destination = tmp_path / "mask.png"
+    destination = tmp_path / "cutout.png"
 
     def fail_after_partial_write(self, stream, *args, **kwargs):  # type: ignore[no-untyped-def]
         stream.write(b"partial encoded output")
@@ -277,11 +277,11 @@ def test_enospc_during_encode_leaves_no_destination_or_staging_file(
     monkeypatch.setattr(Image.Image, "save", fail_after_partial_write)
     with pytest.raises(RemovalFailure, match="staged output could not be verified") as raised:
         stage_image(
-            Image.new("L", (256, 256), 200),
+            Image.new("RGBA", (256, 256), (200, 100, 50, 255)),
             destination,
             image_format="PNG",
             media_type="image/png",
-            kind="mask",
+            kind="cutout-png",
             max_output_bytes=MB,
             staging_token=TOKEN,
         )

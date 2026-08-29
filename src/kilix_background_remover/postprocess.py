@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
-from PIL import Image, ImageChops, ImageFilter
+from PIL import Image
 
 from .contracts import EdgeSettings
 from .errors import RemovalFailure
@@ -46,7 +46,7 @@ def prediction_to_mask(
             "provider",
             "infer",
         )
-    payload = bytes(round(max(0.0, min(1.0, value)) * 255.0) for value in values)
+    payload = bytes(math.floor(max(0.0, min(1.0, value)) * 255.0 + 0.5) for value in values)
     return Image.frombytes("L", (width, height), payload), warnings
 
 
@@ -55,17 +55,55 @@ def apply_edge_policy(
 ) -> Image.Image:
     if mask.mode != "L":
         mask = mask.convert("L")
-    threshold = round(edge.threshold * 255.0)
+    threshold = edge.threshold_u8
     if edge.matting_mode == "none":
         mask = mask.point(lambda value: 255 if value >= threshold else 0)
-    elif threshold > 0:
-        denominator = max(1, 255 - threshold)
-        mask = mask.point(lambda value: round(max(0, value - threshold) * 255 / denominator))
+    else:
+        mask = mask.point(lambda value: value if value >= threshold else 0)
     if edge.feather_radius_px > 0:
-        mask = mask.filter(ImageFilter.GaussianBlur(edge.feather_radius_px))
+        mask = _square_mean(mask, edge.feather_radius_px)
     if edge.preserve_source_alpha:
-        mask = ImageChops.multiply(mask, source_alpha.convert("L"))
+        alpha = source_alpha.convert("L").tobytes()
+        payload = bytes(
+            min(value, source) for value, source in zip(mask.tobytes(), alpha, strict=True)
+        )
+        mask = Image.frombytes("L", mask.size, payload)
     return mask
+
+
+def _square_mean(mask: Image.Image, radius: int) -> Image.Image:
+    width, height = mask.size
+    source = mask.tobytes()
+    span = radius * 2 + 1
+    horizontal = [0] * (width * height)
+    for y in range(height):
+        row = source[y * width : (y + 1) * width]
+        prefix = [0]
+        for value in row:
+            prefix.append(prefix[-1] + value)
+        for x in range(width):
+            low = max(0, x - radius)
+            high = min(width - 1, x + radius)
+            total = prefix[high + 1] - prefix[low]
+            total += max(0, radius - x) * row[0]
+            total += max(0, x + radius - width + 1) * row[-1]
+            horizontal[y * width + x] = total
+    divisor = span * span
+    rounding = divisor // 2
+    result = bytearray(width * height)
+    for x in range(width):
+        column = [horizontal[y * width + x] for y in range(height)]
+        prefix = [0]
+        for value in column:
+            prefix.append(prefix[-1] + value)
+        for y in range(height):
+            low = max(0, y - radius)
+            high = min(height - 1, y + radius)
+            total = prefix[high + 1] - prefix[low]
+            total += max(0, radius - y) * column[0]
+            total += max(0, y + radius - height + 1) * column[-1]
+            result[y * width + x] = (total + rounding) // divisor
+    return Image.frombytes("L", mask.size, bytes(result))
 
 
 def render_cutout(source: Image.Image, mask: Image.Image) -> Image.Image:

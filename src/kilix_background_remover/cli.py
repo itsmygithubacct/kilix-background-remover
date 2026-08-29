@@ -28,7 +28,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kilix-background-remover")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
-    contract = subcommands.add_parser("run-contract", help="run a frozen v1 request")
+    contract = subcommands.add_parser(
+        "run-contract", help="run a conditional candidate-R5 v2 request"
+    )
     contract.add_argument("request", type=Path)
     contract.add_argument("--reference-profile", action="store_true")
 

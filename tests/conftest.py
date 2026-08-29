@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from jsonschema import Draft202012Validator, FormatChecker
-from referencing import Registry, Resource
+from jsonschema import Draft202012Validator
 
+from kilix_background_remover.contract_v2 import ContractRuntime
 from kilix_background_remover.frontend import describe_image, make_request
 
 ROOT = Path(__file__).resolve().parents[1]
 CORPUS = ROOT / "tests" / "fixtures" / "corpus"
-SCHEMAS = ROOT / "contracts" / "schemas"
 
 
 @pytest.fixture
@@ -46,25 +44,7 @@ def request_factory() -> Callable[..., dict[str, object]]:
 
 @pytest.fixture(scope="session")
 def validators() -> dict[str, Draft202012Validator]:
-    resources: list[tuple[str, Resource[object]]] = []
-    message_schemas: dict[str, object] = {}
-    for path in sorted(SCHEMAS.glob("*.schema.json")):
-        schema = json.loads(path.read_text(encoding="utf-8"))
-        Draft202012Validator.check_schema(schema)
-        identity = schema["$id"]
-        resources.append((identity, Resource.from_contents(schema)))
-        wire = schema.get("properties", {}).get("schema", {}).get("const")
-        if isinstance(wire, str):
-            message_schemas[wire] = schema
-    registry = Registry().with_resources(resources)
-    return {
-        identity: Draft202012Validator(
-            schema,
-            registry=registry,
-            format_checker=FormatChecker(),
-        )
-        for identity, schema in message_schemas.items()
-    }
+    return ContractRuntime.load().validators
 
 
 def assert_valid_message(

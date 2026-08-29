@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import os
+import struct
 import tempfile
+import zlib
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
 
+from .contract_v2 import decode_gray8_png
 from .errors import RemovalFailure
 
 _DECODER_BOOKKEEPING = {
@@ -83,7 +86,10 @@ def stage_image(
     try:
         os.fchmod(descriptor, 0o600)
         with os.fdopen(descriptor, "w+b") as stream:
-            image.save(stream, format=image_format, **save_args)
+            if image_format == "PNG" and kind == "mask":
+                stream.write(_encode_gray8_png(image))
+            else:
+                image.save(stream, format=image_format, **save_args)
             stream.flush()
             os.fsync(stream.fileno())
         encoded_bytes = stage.stat().st_size
@@ -94,6 +100,10 @@ def stage_image(
                 "resource",
                 "write-output",
             )
+        if kind == "mask":
+            width, height, pixels = decode_gray8_png(stage.read_bytes())
+            if (width, height) != image.size or bytes(pixels) != image.convert("L").tobytes():
+                raise OSError("encoded mask pixels differ")
         with Image.open(stage) as check:
             check.load()
             if check.size != image.size:
@@ -124,6 +134,25 @@ def stage_image(
         media_type=media_type,
         kind=kind,
     )
+
+
+def _encode_gray8_png(image: Image.Image) -> bytes:
+    gray = image.convert("L")
+    width, height = gray.size
+    pixels = gray.tobytes()
+    scanlines = b"".join(b"\x00" + pixels[row * width : (row + 1) * width] for row in range(height))
+    header = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + _png_chunk(b"IHDR", header)
+        + _png_chunk(b"IDAT", zlib.compress(scanlines, level=9))
+        + _png_chunk(b"IEND", b"")
+    )
+
+
+def _png_chunk(kind: bytes, payload: bytes) -> bytes:
+    checksum = zlib.crc32(kind + payload) & 0xFFFFFFFF
+    return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", checksum)
 
 
 def discard_staged(items: list[StagedImage]) -> None:

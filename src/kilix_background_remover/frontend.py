@@ -3,24 +3,23 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import stat
 import uuid
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from PIL import Image
 
+from .contract_v2 import ContractRefusal, ContractRuntime
 from .contracts import sha256_file
 from .errors import RemovalFailure
 from .worker import reference_identity
 
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_INPUT_BYTES = 512 * 1024 * 1024
-MAX_DECODED_PIXELS = 200_000_000
+MAX_DECODED_PIXELS = 100_000_000
 MAX_OUTPUT_BYTES = 1024 * 1024 * 1024
 MEDIA_TYPES = {
     "JPEG": "image/jpeg",
@@ -33,17 +32,15 @@ MEDIA_TYPES = {
 def load_json_document(path: Path) -> object:
     if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_JSON_BYTES:
         raise ValueError("JSON input must be a bounded regular file")
-
-    def no_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError(f"duplicate JSON key: {key}")
-            result[key] = value
-        return result
-
-    with path.open("r", encoding="utf-8") as stream:
-        return json.load(stream, object_pairs_hook=no_duplicates)
+    try:
+        return ContractRuntime.load().accept_wire(path.read_bytes())
+    except ContractRefusal as exc:
+        raise RemovalFailure(
+            "background.invalid-request",
+            "The request is not an accepted canonical v2 document.",
+            "input",
+            "accepted",
+        ) from exc
 
 
 def describe_image(path: Path) -> dict[str, object]:
@@ -151,9 +148,9 @@ def make_request(
     }
     profile_id, artifact_sha256 = reference_identity()
     return {
-        "schema": "kilix.background-removal.request/v1",
+        "schema": "kilix.background-removal.request/v2",
         "job": {
-            "schema": "kilix.media-job.request/v1",
+            "schema": "kilix.media-job.request/v2",
             "request_id": str(uuid.uuid4()),
             "submitted_at": datetime.now(UTC)
             .isoformat(timespec="microseconds")
@@ -173,8 +170,8 @@ def make_request(
         "output_kinds": output_kinds,
         "destinations": destinations,
         "edge": {
-            "threshold": 0.0,
-            "feather_radius_px": 0.0,
+            "threshold_u8": 0,
+            "feather_radius_px": 0,
             "matting_mode": "alpha",
             "preserve_source_alpha": True,
         },

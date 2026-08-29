@@ -8,7 +8,10 @@ import os
 import re
 import tempfile
 import threading
+import uuid
+from copy import deepcopy
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
@@ -42,6 +45,19 @@ def _fingerprint(request: dict[str, object]) -> str:
         job.pop("submitted_at", None)
     payload = json.dumps(stable, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
+
+
+def _fresh_attempt(request: dict[str, object]) -> dict[str, object]:
+    """Give a non-resumed retry a new v2 lifecycle identity."""
+    attempt = deepcopy(request)
+    job = attempt.get("job")
+    if not isinstance(job, dict):
+        raise ValueError("validated batch request has no job object")
+    job["request_id"] = str(uuid.uuid4())
+    job["submitted_at"] = (
+        datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    )
+    return attempt
 
 
 def _result_files_are_current(result: dict[str, object]) -> bool:
@@ -147,7 +163,10 @@ class BatchRunner:
                 continue
             if cancel is not None and cancel.is_set():
                 break
-            outcome = self._supervisor.run(entry.request, cancel=cancel)
+            execution_request = (
+                _fresh_attempt(entry.request) if state_path.exists() else entry.request
+            )
+            outcome = self._supervisor.run(execution_request, cancel=cancel)
             _persist(state_path, entry.key, fingerprint, outcome)
             outcomes.append(BatchItemOutcome(index, entry.key, "executed", outcome))
             if outcome.error is not None:

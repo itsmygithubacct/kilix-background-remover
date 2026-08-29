@@ -75,7 +75,7 @@ def test_bridge_accepts_only_fixed_fields_and_shares_worker(
 
     request_with_command = copy.deepcopy(request)
     request_with_command["command"] = ["sh", "-c", "false"]
-    with pytest.raises(Exception, match="missing or unknown"):
+    with pytest.raises(Exception, match="conditional R5"):
         run_bridge_message(
             {**message, "request": request_with_command}, allow_reference_profile=False
         )
@@ -93,7 +93,7 @@ def test_bridge_accepts_only_fixed_fields_and_shares_worker(
 
 def test_tui_narrow_render_is_deterministic() -> None:
     progress = {
-        "schema": "kilix.background-removal.progress/v1",
+        "schema": "kilix.background-removal.progress/v2",
         "phase": "postprocess",
         "job": {"state": "running", "progress": 0.725},
     }

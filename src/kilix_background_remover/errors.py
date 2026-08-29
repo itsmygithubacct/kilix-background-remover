@@ -24,7 +24,7 @@ def diagnostic_reference(request_id: str, code: str) -> str:
 
 
 def invalid_request(
-    message: str = "The request does not match the frozen v1 contract.",
+    message: str = "The request does not match the conditional R5 v2 contract.",
 ) -> RemovalFailure:
     return RemovalFailure(
         "background.invalid-request", message, "input", "accepted", retryable=False

@@ -1,4 +1,4 @@
-"""Strict runtime decoder for the frozen F108 v1 request."""
+"""Strict product decoder for the OD-22-authorized candidate R5 request."""
 
 from __future__ import annotations
 
@@ -7,9 +7,11 @@ import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .contract_v2 import ContractRefusal, ContractRuntime, validate_request_semantics
 from .errors import invalid_request
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -45,8 +47,8 @@ class ImageInput:
 
 @dataclass(frozen=True, slots=True)
 class EdgeSettings:
-    threshold: float
-    feather_radius_px: float
+    threshold_u8: int
+    feather_radius_px: int
     matting_mode: str
     preserve_source_alpha: bool
 
@@ -159,13 +161,13 @@ def _image_input(value: Any, name: str) -> ImageInput:
         raise invalid_request(f"{name}.orientation_applied must be true.")
     media_type = _string(image["media_type"], f"{name}.media_type")
     if media_type not in MEDIA_TYPES:
-        raise invalid_request(f"{name}.media_type is not supported by v1.")
+        raise invalid_request(f"{name}.media_type is not supported by v2.")
     alpha_mode = _string(image["alpha_mode"], f"{name}.alpha_mode")
     if alpha_mode not in {"opaque", "premultiplied", "straight"}:
-        raise invalid_request(f"{name}.alpha_mode is not supported by v1.")
+        raise invalid_request(f"{name}.alpha_mode is not supported by v2.")
     color_space = _string(image["color_space"], f"{name}.color_space")
     if color_space not in {"display-p3", "linear-srgb", "rec2020-linear", "srgb"}:
-        raise invalid_request(f"{name}.color_space is not supported by v1.")
+        raise invalid_request(f"{name}.color_space is not supported by v2.")
     return ImageInput(
         path=_path(image["path"], f"{name}.path"),
         sha256=_sha(image["sha256"], f"{name}.sha256"),
@@ -180,6 +182,11 @@ def _image_input(value: Any, name: str) -> ImageInput:
 
 def parse_request(value: object) -> RemovalRequest:
     root = _mapping(value, "request")
+    try:
+        _runtime().validate_message(root)
+        validate_request_semantics(root)
+    except ContractRefusal as exc:
+        raise invalid_request("The request does not satisfy the conditional R5 contract.") from exc
     fields = {
         "background",
         "destinations",
@@ -191,13 +198,13 @@ def parse_request(value: object) -> RemovalRequest:
         "schema",
     }
     _exact(root, fields, fields, "request")
-    if root["schema"] != "kilix.background-removal.request/v1":
+    if root["schema"] != "kilix.background-removal.request/v2":
         raise invalid_request("The request schema identity is not supported.")
 
     job = _mapping(root["job"], "job")
     job_fields = {"limits", "request_id", "schema", "submitted_at"}
     _exact(job, job_fields, job_fields, "job")
-    if job["schema"] != "kilix.media-job.request/v1":
+    if job["schema"] != "kilix.media-job.request/v2":
         raise invalid_request("The media-job schema identity is not supported.")
     request_id = _string(job["request_id"], "job.request_id")
     try:
@@ -258,15 +265,20 @@ def parse_request(value: object) -> RemovalRequest:
         raise invalid_request("input and output paths must be distinct.")
 
     edge_wire = _mapping(root["edge"], "edge")
-    edge_fields = {"feather_radius_px", "matting_mode", "preserve_source_alpha", "threshold"}
+    edge_fields = {
+        "feather_radius_px",
+        "matting_mode",
+        "preserve_source_alpha",
+        "threshold_u8",
+    }
     _exact(edge_wire, edge_fields, edge_fields, "edge")
     matting = _string(edge_wire["matting_mode"], "edge.matting_mode")
     if matting not in {"alpha", "none"} or type(edge_wire["preserve_source_alpha"]) is not bool:
         raise invalid_request("edge contains an unsupported mode.")
     edge = EdgeSettings(
-        threshold=_number(edge_wire["threshold"], 0.0, 1.0, "edge.threshold"),
-        feather_radius_px=_number(
-            edge_wire["feather_radius_px"], 0.0, 4096.0, "edge.feather_radius_px"
+        threshold_u8=_integer(edge_wire["threshold_u8"], 0, 255, "edge.threshold_u8"),
+        feather_radius_px=_integer(
+            edge_wire["feather_radius_px"], 0, 4096, "edge.feather_radius_px"
         ),
         matting_mode=matting,
         preserve_source_alpha=edge_wire["preserve_source_alpha"],
@@ -297,7 +309,7 @@ def parse_request(value: object) -> RemovalRequest:
         ):
             raise invalid_request("A background image must match the foreground geometry.")
     else:
-        raise invalid_request("background.mode is not supported by v1.")
+        raise invalid_request("background.mode is not supported by v2.")
 
     combined_bytes = image_input.bytes
     combined_pixels = image_input.width * image_input.height
@@ -322,3 +334,8 @@ def parse_request(value: object) -> RemovalRequest:
         background_image=background_image,
         wire=dict(root),
     )
+
+
+@lru_cache(maxsize=1)
+def _runtime() -> ContractRuntime:
+    return ContractRuntime.load()

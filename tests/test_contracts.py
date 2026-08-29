@@ -2,175 +2,73 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import json
-import re
 from pathlib import Path
 
 import pytest
-from conftest import ROOT, assert_valid_message
-from jsonschema import Draft202012Validator
+from conftest import ROOT
 
+from kilix_background_remover.contract_v2 import (
+    WIRE_TO_SCHEMA,
+    ContractRefusal,
+    ContractRuntime,
+    canonical_bytes,
+)
 from kilix_background_remover.contracts import parse_request
 from kilix_background_remover.errors import RemovalFailure
-
-EXPECTED_AUTHORITY_MANIFEST = "7fedfa2d504fb4e27a538db54fcfcaaca33e90972748cb04b1592eed0c68f846"
-
-
-def _verify_manifest(root: Path, manifest: Path) -> None:
-    for line in manifest.read_text(encoding="utf-8").splitlines():
-        digest, relative = line.split("  ", 1)
-        candidate = root / relative
-        assert candidate.is_file(), relative
-        assert hashlib.sha256(candidate.read_bytes()).hexdigest() == digest
+from kilix_background_remover.r5_return import generate_ledger
+from kilix_background_remover.return_controls import (
+    G5A_MANIFEST_SHA256,
+    g5a_rejection_result,
+    load_g5a_request,
+)
 
 
-def _semantic_lifecycle_errors(messages: list[dict[str, object]]) -> list[str]:
-    errors: list[str] = []
-    request = messages[0]
-    request_job = request["job"]
-    assert isinstance(request_job, dict)
-    last_sequence = -1
-    last_progress = -1.0
-    states = {
-        None: {"queued"},
-        "queued": {"cancelled", "failed", "loading", "queued", "running"},
-        "loading": {"cancelled", "failed", "loading", "running"},
-        "running": {"cancelled", "encoding", "failed", "running"},
-        "encoding": {"cancelled", "committed", "encoding", "failed"},
+def test_installed_candidate_r5_identity_and_inventory() -> None:
+    runtime = ContractRuntime.load()
+    assert runtime.lock.manifest_sha256 == (
+        "803a5661a708b366b1d26884a4cf52d45c71dac58926e8216eb69aa902cbd25c"
+    )
+    assert runtime.lock.version == "0.2.1.dev5"
+    assert len(runtime.manifest_entries) == 46
+    assert len(runtime.documents) == 12
+    assert len(WIRE_TO_SCHEMA) == 10
+    assert all(wire.endswith("/v2") for wire in WIRE_TO_SCHEMA)
+
+
+def test_independent_product_ledger_matches_complete_public_population(tmp_path: Path) -> None:
+    summary = generate_ledger(tmp_path)
+    population = summary["population"]
+    assert isinstance(population, dict)
+    assert population["matched"] == population["total"] == 168
+    assert population["unique"] == population["total"] == 168
+    assert (tmp_path / "outcomes.jsonl").read_bytes().count(b"\n") == 168
+
+
+def test_historical_g5a_is_immutable_and_rejected_by_both_production_entries() -> None:
+    authority = ROOT / "contracts" / "AUTHORITY-SHA256SUMS"
+    assert hashlib.sha256(authority.read_bytes()).hexdigest() == G5A_MANIFEST_SHA256
+    fixture = ROOT / "contracts" / "fixtures" / "valid" / "f108-reference-mask-lifecycle.json"
+    result = g5a_rejection_result(load_g5a_request(fixture))
+    assert result["production_rejections"] == {"matched": 2, "total": 2}
+    assert result["negotiation_or_fallback_paths"] == {
+        "observed": 0,
+        "allowed": 0,
+        "total": 1,
     }
-    state: str | None = None
-    for message in messages[1:]:
-        if message["schema"] == "kilix.media-job.cancel/v1":
-            continue
-        job = message["job"]
-        assert isinstance(job, dict)
-        sequence = job["sequence"]
-        assert isinstance(sequence, int)
-        if sequence <= last_sequence:
-            errors.append("sequence")
-        last_sequence = sequence
-        next_state = job["state"]
-        assert isinstance(next_state, str)
-        if next_state not in states.get(state, {state}):
-            errors.append("transition")
-        state = next_state
-        if message["schema"] == "kilix.background-removal.progress/v1":
-            progress = job["progress"]
-            assert isinstance(progress, int | float)
-            if progress < last_progress:
-                errors.append("progress")
-            last_progress = float(progress)
-        if message["schema"] == "kilix.background-removal.result/v1":
-            source = request["input"]
-            model = request["model"]
-            assert isinstance(source, dict)
-            if message["model"] != model:
-                errors.append("model")
-            expected_source = {
-                "sha256": source["sha256"],
-                "width": source["width"],
-                "height": source["height"],
-            }
-            if message["source"] != expected_source:
-                errors.append("source")
-            mask = message["mask"]
-            assert isinstance(mask, dict)
-            if (mask["width"], mask["height"]) != (source["width"], source["height"]):
-                errors.append("mask-geometry")
-    return errors
 
 
-def _mutated_messages(fixture: dict[str, object]) -> list[dict[str, object]]:
-    base_name = fixture["base"]
-    assert isinstance(base_name, str)
-    base_path = ROOT / "contracts" / "fixtures" / "valid" / base_name
-    lifecycle = json.loads(base_path.read_text(encoding="utf-8"))
-    mutation = fixture["mutation"]
-    assert isinstance(mutation, dict)
-    pointer = mutation["path"]
-    assert isinstance(pointer, str)
-    parts = [part.replace("~1", "/").replace("~0", "~") for part in pointer.split("/")[1:]]
-    target: object = lifecycle
-    for part in parts[:-1]:
-        target = target[int(part)] if isinstance(target, list) else target[part]  # type: ignore[index]
-    final = parts[-1]
-    if isinstance(target, list):
-        target[int(final)] = mutation["value"]
-    else:
-        assert isinstance(target, dict)
-        target[final] = mutation["value"]
-    return lifecycle["messages"]
-
-
-def test_frozen_contract_bytes_and_manifests() -> None:
-    contract_root = ROOT / "contracts"
-    authority = contract_root / "AUTHORITY-SHA256SUMS"
-    assert hashlib.sha256(authority.read_bytes()).hexdigest() == EXPECTED_AUTHORITY_MANIFEST
-    _verify_manifest(contract_root, contract_root / "SHA256SUMS")
-    authority_records = {
-        relative: digest
-        for digest, relative in (
-            line.split("  ", 1) for line in authority.read_text(encoding="utf-8").splitlines()
-        )
-    }
-    for line in (contract_root / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
-        digest, relative = line.split("  ", 1)
-        assert authority_records[relative] == digest
-
-
-def test_vendoring_note_states_the_real_authority_digest() -> None:
-    """The prose digest in contracts/README.md must equal the computed one.
-
-    It stated a digest that shared only the first eight characters with the
-    real one, so it read as verified while binding nothing. Prose that quotes
-    a digest is a pin, and an unchecked pin drifts.
-    """
-    contract_root = ROOT / "contracts"
-    computed = hashlib.sha256((contract_root / "AUTHORITY-SHA256SUMS").read_bytes()).hexdigest()
-    note = (contract_root / "README.md").read_text(encoding="utf-8")
-    quoted = re.findall(r"\b[0-9a-f]{64}\b", note)
-    assert quoted, "the vendoring note must quote the authority digest"
-    for digest in quoted:
-        assert digest == computed, f"stale digest in contracts/README.md: {digest}"
-
-
-def test_valid_authority_lifecycles(
-    validators: dict[str, Draft202012Validator],
-) -> None:
-    for path in sorted((ROOT / "contracts" / "fixtures" / "valid").glob("*.json")):
-        fixture = json.loads(path.read_text(encoding="utf-8"))
-        messages = fixture["messages"]
-        for message in messages:
-            assert_valid_message(validators, message)
-        assert not _semantic_lifecycle_errors(messages), path.name
-
-
-def test_every_invalid_authority_lifecycle_is_rejected(
-    validators: dict[str, Draft202012Validator],
-) -> None:
-    for path in sorted((ROOT / "contracts" / "fixtures" / "invalid").glob("*.json")):
-        fixture = json.loads(path.read_text(encoding="utf-8"))
-        messages = _mutated_messages(fixture)
-        schema_errors = []
-        for message in messages:
-            identity = message.get("schema")
-            if identity in validators:
-                schema_errors.extend(validators[identity].iter_errors(message))
-            else:
-                schema_errors.append(identity)
-        request_error = False
-        try:
-            parse_request(messages[0])
-        except RemovalFailure:
-            request_error = True
-        assert schema_errors or request_error or _semantic_lifecycle_errors(messages), path.name
-
-
-def test_runtime_decoder_rejects_unknown_minor_field(
-    request_factory: object, tmp_path: Path
-) -> None:
+def test_runtime_decoder_rejects_unknown_v2_field(request_factory: object, tmp_path: Path) -> None:
     request = request_factory(tmp_path)  # type: ignore[operator]
     mutated = copy.deepcopy(request)
     mutated["future_minor_field"] = True
-    with pytest.raises(RemovalFailure, match="missing or unknown"):
+    with pytest.raises(RemovalFailure, match="conditional R5") as caught:
         parse_request(mutated)
+    assert isinstance(caught.value.__cause__, ContractRefusal)
+    assert str(caught.value.__cause__) == "schema:C-SHAPE"
+
+
+def test_runtime_accepts_canonical_v2_request(request_factory: object, tmp_path: Path) -> None:
+    request = request_factory(tmp_path)  # type: ignore[operator]
+    runtime = ContractRuntime.load()
+    assert runtime.accept_wire(canonical_bytes(request)) == request
+    assert parse_request(request).wire == request

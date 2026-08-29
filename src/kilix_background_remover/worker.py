@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing as mp
+import os
 import secrets
 import threading
 import time
@@ -26,6 +27,8 @@ from .atomic import (
     discard_staged,
     stage_image,
 )
+from .cancellation_v2 import DurableCancellationGate, TerminalState
+from .contract_v2 import ContractRefusal, canonical_bytes, strict_decode
 from .contracts import RemovalRequest, parse_request, sha256_file
 from .decode import decode_image
 from .errors import RemovalFailure, diagnostic_reference
@@ -39,10 +42,33 @@ from .postprocess import (
 FALLBACK_REQUEST_ID = "00000000-0000-4000-8000-000000000000"
 INFERENCE_STRIP_PIXELS = 1_048_576
 ABORT_GRACE_SECONDS = 0.75
+ERROR_POLICY = {
+    "background.artifact-invalid": ("provider", False, "failed"),
+    "background.backend-unavailable": ("provider", True, "failed"),
+    "background.deadline": ("deadline", True, "failed"),
+    "background.inference-failed": ("provider", True, "failed"),
+    "background.input-limit": ("input", False, "failed"),
+    "background.input-unreadable": ("input", False, "failed"),
+    "background.internal": ("internal", False, "failed"),
+    "background.invalid-request": ("input", False, "failed"),
+    "background.output-failed": ("output", True, "failed"),
+    "background.profile-unavailable": ("provider", True, "failed"),
+    "job.cancelled": ("cancellation", False, "cancelled"),
+}
 
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _default_cancellation_database() -> Path:
+    base = Path(os.environ.get("XDG_RUNTIME_DIR", "/var/tmp"))
+    root = base / f"kilix-background-remover-{os.getuid()}"
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    status = root.lstat()
+    if root.is_symlink() or not root.is_dir() or status.st_uid != os.getuid():
+        raise RuntimeError("the cancellation state directory is unsafe")
+    return root / "cancellation-v2.sqlite3"
 
 
 def _profile() -> tuple[dict[str, Any], Path]:
@@ -76,9 +102,9 @@ def _progress(
     started: float,
 ) -> dict[str, object]:
     return {
-        "schema": "kilix.background-removal.progress/v1",
+        "schema": "kilix.background-removal.progress/v2",
         "job": {
-            "schema": "kilix.media-job.progress/v1",
+            "schema": "kilix.media-job.progress/v2",
             "request_id": request_id,
             "sequence": sequence,
             "state": state,
@@ -92,18 +118,17 @@ def _progress(
 
 
 def _error_wire(request_id: str, sequence: int, failure: RemovalFailure) -> dict[str, object]:
-    cancelled = failure.code == "job.cancelled"
+    category, retryable, state = ERROR_POLICY.get(failure.code, ("internal", False, "failed"))
     return {
-        "schema": "kilix.background-removal.error/v1",
+        "schema": "kilix.background-removal.error/v2",
         "job": {
-            "schema": "kilix.media-job.error/v1",
+            "schema": "kilix.media-job.error/v2",
             "request_id": request_id,
             "sequence": sequence,
-            "state": "cancelled" if cancelled else "failed",
+            "state": state,
             "code": failure.code,
-            "category": failure.category,
-            "safe_message": failure.safe_message,
-            "retryable": failure.retryable,
+            "category": category,
+            "retryable": retryable,
             "diagnostic_reference": diagnostic_reference(request_id, failure.code),
             "occurred_at": _now(),
         },
@@ -174,17 +199,14 @@ def _run_onnx_mask(
                 )
             low = min(low, float(flat.min()))
             high = max(high, float(flat.max()))
-            encoded = np.rint(np.clip(flat, 0.0, 1.0) * np.float32(255.0)).astype(np.uint8)
+            encoded = np.floor(
+                np.clip(flat, 0.0, 1.0) * np.float32(255.0) + np.float32(0.5)
+            ).astype(np.uint8)
             start = top * width
             payload[start : start + expected] = encoded.tobytes()
         if high == low:
             if high <= 0.0:
-                return Image.new("L", (width, height), 0), [
-                    {
-                        "code": "background.no-salient-object",
-                        "safe_message": "No foreground was detected.",
-                    }
-                ]
+                return Image.new("L", (width, height), 0), []
             raise RemovalFailure(
                 "background.inference-failed",
                 "The model returned a constant nonzero mask.",
@@ -266,13 +288,24 @@ def _execute(
     model_path: Path,
     cached: dict[str, Any],
     staging_token: str,
+    cancellation_gate: DurableCancellationGate,
 ) -> dict[str, object]:
     request = parse_request(raw)
     started = time.monotonic()
-    sequence = 0
 
     def emit(state: str, fraction: float, phase: str) -> None:
-        nonlocal sequence
+        _check_cancel(cancel, phase)
+        try:
+            sequence = cancellation_gate.reserve_progress(request.request_id)
+        except ContractRefusal as exc:
+            if exc.rule_id == "LC-PROGRESS-AFTER-CANCEL":
+                raise RemovalFailure(
+                    "job.cancelled",
+                    "The job was cancelled.",
+                    "cancellation",
+                    phase,
+                ) from exc
+            raise
         send(
             {
                 "kind": "progress",
@@ -286,8 +319,6 @@ def _execute(
                 ),
             }
         )
-        sequence += 1
-        _check_cancel(cancel, phase)
 
     emit("queued", 0.0, "accepted")
     emit("loading", 0.05, "resolve-profile")
@@ -373,7 +404,21 @@ def _execute(
         emit("encoding", 0.98, "commit")
         send({"kind": "prepared", "payload": _prepared(staged)})
         _check_cancel(cancel, "commit")
-        commit_staged(staged)
+        try:
+            terminal = cancellation_gate.reserve_terminal(
+                request.request_id,
+                "committed",
+                publish=lambda: commit_staged(staged),
+            )
+        except ContractRefusal as exc:
+            if exc.rule_id == "LC-ACCEPTED-CANCEL-TERMINAL":
+                raise RemovalFailure(
+                    "job.cancelled",
+                    "The job was cancelled.",
+                    "cancellation",
+                    "commit",
+                ) from exc
+            raise
     except Exception:
         discard_staged(staged)
         raise
@@ -393,12 +438,12 @@ def _execute(
         if item.kind != "mask"
     ]
     return {
-        "schema": "kilix.background-removal.result/v1",
-        "request_schema": "kilix.background-removal.request/v1",
+        "schema": "kilix.background-removal.result/v2",
+        "request_schema": "kilix.background-removal.request/v2",
         "job": {
-            "schema": "kilix.media-job.result/v1",
+            "schema": "kilix.media-job.result/v2",
             "request_id": request.request_id,
-            "sequence": sequence,
+            "sequence": terminal.sequence,
             "state": "committed",
             "committed_at": _now(),
             "elapsed_ms": round((time.monotonic() - started) * 1000),
@@ -415,6 +460,7 @@ def _execute(
             "media_type": "image/png",
             "encoding": "gray8",
             "semantics": "foreground-alpha",
+            "pixel_contract": "kilix.foreground-alpha-gray8/v2",
             "bytes": mask_item.bytes,
             "sha256": mask_item.sha256,
             "width": mask_item.width,
@@ -428,13 +474,40 @@ def _execute(
         "backend": "onnxruntime-cpu",
         "settings": {
             "edge": request.wire["edge"],
-            "background": request.wire["background"],
+            "background": _background_provenance(request.wire["background"]),
         },
     }
 
 
-def _worker_loop(connection: Connection, cancel: Any, model_path: str) -> None:
+def _background_provenance(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise RuntimeError("validated background is not an object")
+    mode = value.get("mode")
+    if mode == "transparent":
+        return {"mode": "transparent"}
+    if mode == "color":
+        return {"mode": "color", "rgba": value["rgba"]}
+    image = value.get("image")
+    if mode == "image" and isinstance(image, dict):
+        return {
+            "mode": "image",
+            "image": {
+                "sha256": image["sha256"],
+                "width": image["width"],
+                "height": image["height"],
+            },
+        }
+    raise RuntimeError("validated background mode is unavailable")
+
+
+def _worker_loop(
+    connection: Connection,
+    cancel: Any,
+    model_path: str,
+    cancellation_database: str,
+) -> None:
     cached: dict[str, Any] = {}
+    cancellation_gate = DurableCancellationGate(Path(cancellation_database))
     while True:
         try:
             message = connection.recv()
@@ -469,6 +542,7 @@ def _worker_loop(connection: Connection, cancel: Any, model_path: str) -> None:
                 Path(model_path),
                 cached,
                 staging_token,
+                cancellation_gate,
             )
             connection.send({"kind": "result", "payload": result})
         except RemovalFailure as caught:
@@ -521,12 +595,16 @@ def _rollback_prepared(records: list[dict[str, object]]) -> None:
 class WorkerSupervisor:
     """Own exactly one persistent worker and one warm ORT session cache."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, cancellation_database: Path | None = None) -> None:
         _, model = _profile()
         self._context: Any = mp.get_context("spawn")
         self._model_path = str(model)
         self._lock = threading.Lock()
+        self._state_lock = threading.Lock()
         self._closed = False
+        self._active_request_id: str | None = None
+        self._cancellation_database = cancellation_database or _default_cancellation_database()
+        self._cancellation_gate = DurableCancellationGate(self._cancellation_database)
         self._parent: Connection
         self._cancel: Any
         self._process: Any
@@ -537,7 +615,12 @@ class WorkerSupervisor:
         self._cancel = self._context.Event()
         self._process = self._context.Process(
             target=_worker_loop,
-            args=(child, self._cancel, self._model_path),
+            args=(
+                child,
+                self._cancel,
+                self._model_path,
+                str(self._cancellation_database),
+            ),
             name="kilix-background-remover-worker",
             daemon=True,
         )
@@ -555,6 +638,62 @@ class WorkerSupervisor:
     def pid(self) -> int | None:
         return cast(int | None, self._process.pid)
 
+    def cancel(self, request_bytes: bytes) -> bytes:
+        """Linearize a canonical v2 cancel request without taking the run lock."""
+        outcome_bytes = self._cancellation_gate.cancel(request_bytes)
+        outcome = strict_decode(outcome_bytes)
+        if not isinstance(outcome, dict):
+            raise RuntimeError("validated cancellation outcome is not an object")
+        request_id = outcome.get("request_id")
+        if outcome.get("outcome") == "accepted" and isinstance(request_id, str):
+            with self._state_lock:
+                if self._active_request_id == request_id:
+                    self._cancel.set()
+        return outcome_bytes
+
+    def _finish(self, request_id: str, outcome: JobOutcome) -> JobOutcome:
+        with self._state_lock:
+            if self._active_request_id == request_id:
+                self._active_request_id = None
+        return outcome
+
+    def _terminal_error(
+        self,
+        request_id: str,
+        *,
+        failure: RemovalFailure | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        if failure is None and payload is None:
+            raise ValueError("a terminal failure or payload is required")
+        state: TerminalState = "failed"
+        if failure is not None and failure.code == "job.cancelled":
+            state = "cancelled"
+        elif payload is not None:
+            job = payload.get("job")
+            if isinstance(job, dict) and job.get("state") == "cancelled":
+                state = "cancelled"
+        try:
+            terminal = self._cancellation_gate.reserve_terminal(request_id, state)
+        except ContractRefusal as exc:
+            if exc.rule_id != "LC-ACCEPTED-CANCEL-TERMINAL":
+                raise
+            failure = RemovalFailure(
+                "job.cancelled",
+                "The job was cancelled.",
+                "cancellation",
+                failure.phase if failure is not None else "accepted",
+            )
+            terminal = self._cancellation_gate.reserve_terminal(request_id, "cancelled")
+        if failure is not None:
+            return _error_wire(request_id, terminal.sequence, failure)
+        assert payload is not None
+        job = payload.get("job")
+        if not isinstance(job, dict):
+            raise RuntimeError("worker terminal error has no job object")
+        job["sequence"] = terminal.sequence
+        return payload
+
     def run(
         self,
         request: object,
@@ -568,6 +707,9 @@ class WorkerSupervisor:
             if not self._process.is_alive():
                 self._hard_restart()
             parsed = parse_request(request)
+            self._cancellation_gate.begin(parsed.request_id)
+            with self._state_lock:
+                self._active_request_id = parsed.request_id
             staging_token = secrets.token_hex(16)
             self._cancel.clear()
             self._parent.send(
@@ -582,10 +724,30 @@ class WorkerSupervisor:
             deadline = time.monotonic() + parsed.limits.deadline_ms / 1000.0
             abort_failure: RemovalFailure | None = None
             abort_deadline = 0.0
+            local_cancel_requested = False
             while True:
                 now = time.monotonic()
                 if abort_failure is None:
-                    if cancel is not None and cancel.is_set():
+                    if cancel is not None and cancel.is_set() and not local_cancel_requested:
+                        local_cancel_requested = True
+                        cancel_request = {
+                            "cancellation_id": str(uuid.uuid4()),
+                            "client_requested_at": _now(),
+                            "reason": "user",
+                            "request_id": parsed.request_id,
+                            "schema": "kilix.media-job.cancel-request/v2",
+                        }
+                        cancel_outcome = strict_decode(self.cancel(canonical_bytes(cancel_request)))
+                        if not isinstance(cancel_outcome, dict):
+                            raise RuntimeError("local cancellation outcome is not an object")
+                        if cancel_outcome.get("outcome") == "accepted":
+                            abort_failure = RemovalFailure(
+                                "job.cancelled",
+                                "The job was cancelled.",
+                                "cancellation",
+                                _failure_phase(progress),
+                            )
+                    elif self._cancel.is_set():
                         abort_failure = RemovalFailure(
                             "job.cancelled",
                             "The job was cancelled.",
@@ -607,10 +769,13 @@ class WorkerSupervisor:
                     self._hard_restart()
                     _rollback_prepared(prepared)
                     cleanup_staging_files(list(parsed.destinations.values()), staging_token)
-                    return JobOutcome(
-                        None,
-                        _error_wire(parsed.request_id, len(progress), abort_failure),
-                        progress,
+                    return self._finish(
+                        parsed.request_id,
+                        JobOutcome(
+                            None,
+                            self._terminal_error(parsed.request_id, failure=abort_failure),
+                            progress,
+                        ),
                     )
 
                 wait_until = abort_deadline if abort_failure is not None else deadline
@@ -629,20 +794,38 @@ class WorkerSupervisor:
                     elif kind == "prepared" and isinstance(payload, list):
                         prepared = [item for item in payload if isinstance(item, dict)]
                     elif kind == "result" and isinstance(payload, dict):
-                        return JobOutcome(payload, None, progress)
+                        terminal = self._cancellation_gate.reserve_terminal(
+                            parsed.request_id, "committed"
+                        )
+                        job = payload.get("job")
+                        if not isinstance(job, dict) or job.get("sequence") != terminal.sequence:
+                            raise RuntimeError("worker result does not match terminal reservation")
+                        return self._finish(
+                            parsed.request_id,
+                            JobOutcome(payload, None, progress),
+                        )
                     elif kind == "error" and isinstance(payload, dict):
                         cleanup_staging_files(list(parsed.destinations.values()), staging_token)
                         if abort_failure is not None:
-                            return JobOutcome(
-                                None,
-                                _error_wire(
-                                    parsed.request_id,
-                                    len(progress),
-                                    abort_failure,
+                            return self._finish(
+                                parsed.request_id,
+                                JobOutcome(
+                                    None,
+                                    self._terminal_error(
+                                        parsed.request_id,
+                                        failure=abort_failure,
+                                    ),
+                                    progress,
                                 ),
-                                progress,
                             )
-                        return JobOutcome(None, payload, progress)
+                        return self._finish(
+                            parsed.request_id,
+                            JobOutcome(
+                                None,
+                                self._terminal_error(parsed.request_id, payload=payload),
+                                progress,
+                            ),
+                        )
 
                 if not self._process.is_alive():
                     _rollback_prepared(prepared)
@@ -654,10 +837,13 @@ class WorkerSupervisor:
                         "internal",
                         _failure_phase(progress),
                     )
-                    return JobOutcome(
-                        None,
-                        _error_wire(parsed.request_id, len(progress), failure),
-                        progress,
+                    return self._finish(
+                        parsed.request_id,
+                        JobOutcome(
+                            None,
+                            self._terminal_error(parsed.request_id, failure=failure),
+                            progress,
+                        ),
                     )
 
     def close(self) -> None:
