@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import io
+import multiprocessing as mp
 import os
+import resource
+import signal
 import stat
+import tempfile
 import warnings
+from contextlib import suppress
 from dataclasses import dataclass
+from multiprocessing.connection import Connection
+from pathlib import Path
+from typing import Any, cast
 
 from PIL import Image, ImageCms, UnidentifiedImageError
 
@@ -33,6 +41,224 @@ MAX_INPUT_FRAMES = 1
 class DecodedImage:
     image: Image.Image
     source_alpha: Image.Image
+
+
+@dataclass(frozen=True, slots=True)
+class DecodeBudget:
+    """Hard limits applied to the disposable untrusted-parser process."""
+
+    wall_seconds: float = 30.0
+    cpu_seconds: int = 30
+    address_space_bytes: int = 2 * 1024 * 1024 * 1024
+
+
+DEFAULT_DECODE_BUDGET = DecodeBudget()
+
+
+def decode_image_bounded(
+    source: ImageInput,
+    limits: Limits,
+    *,
+    budget: DecodeBudget = DEFAULT_DECODE_BUDGET,
+) -> DecodedImage:
+    """Decode hostile bytes in a killable, resource-limited child process.
+
+    Only a private, metadata-free RGBA PNG crosses back into the long-lived
+    worker.  A parser stall, crash, or memory-limit exit therefore cannot leave
+    the model session process executing hostile decoder state.
+    """
+
+    wall_seconds = min(budget.wall_seconds, limits.deadline_ms / 1000.0)
+    if wall_seconds <= 0 or budget.cpu_seconds <= 0 or budget.address_space_bytes <= 0:
+        raise ValueError("decode limits must be positive")
+    context: Any = mp.get_context("spawn")
+    with tempfile.TemporaryDirectory(prefix="kilix-f108-decode-") as temporary:
+        root = Path(temporary)
+        os.chmod(root, 0o700)
+        sanitized = root / "sanitized.png"
+        parent, child = context.Pipe(duplex=False)
+        process = context.Process(
+            target=_decode_child,
+            args=(child, source, limits, budget, sanitized, os.getpid()),
+            name="kilix-f108-image-decoder",
+            daemon=True,
+        )
+        process.start()
+        child.close()
+        message: tuple[str, object] | None = None
+        try:
+            if parent.poll(wall_seconds):
+                try:
+                    received = parent.recv()
+                except EOFError:
+                    received = None
+                if isinstance(received, tuple) and len(received) == 2:
+                    message = received
+            if message is None:
+                if process.is_alive():
+                    _terminate_process(process)
+                    raise RemovalFailure(
+                        "background.input-limit",
+                        "The image decoder exceeded its time limit.",
+                        "resource",
+                        "decode",
+                    )
+                raise RemovalFailure(
+                    "background.input-limit",
+                    "The image decoder exceeded its resource limit.",
+                    "resource",
+                    "decode",
+                )
+            process.join(timeout=1.0)
+            if process.is_alive():
+                _terminate_process(process)
+            kind, payload = message
+            if kind == "failure" and isinstance(payload, tuple) and len(payload) == 5:
+                code, safe_message, category, phase, retryable = payload
+                if all(isinstance(value, str) for value in payload[:4]) and isinstance(
+                    retryable, bool
+                ):
+                    raise RemovalFailure(
+                        cast(str, code),
+                        cast(str, safe_message),
+                        cast(str, category),
+                        cast(str, phase),
+                        retryable,
+                    )
+            if kind == "limit" and payload is None:
+                raise RemovalFailure(
+                    "background.input-limit",
+                    "The image decoder exceeded its resource limit.",
+                    "resource",
+                    "decode",
+                )
+            if kind != "ok" or payload is not None:
+                raise RemovalFailure(
+                    "background.input-unreadable",
+                    "The input image cannot be decoded.",
+                    "input",
+                    "decode",
+                )
+            return _load_sanitized(sanitized, source)
+        finally:
+            parent.close()
+            if process.is_alive():
+                _terminate_process(process)
+
+
+def _terminate_process(process: Any) -> None:
+    process.terminate()
+    process.join(timeout=1.0)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=1.0)
+
+
+def _decode_child(
+    connection: Connection,
+    source: ImageInput,
+    limits: Limits,
+    budget: DecodeBudget,
+    sanitized: Path,
+    expected_parent: int,
+) -> None:
+    try:
+        _arm_parent_death_signal(expected_parent)
+        os.umask(0o077)
+        _apply_decode_limits(source, budget)
+        decoded = decode_image(source, limits)
+        decoded.image.save(
+            sanitized,
+            format="PNG",
+            compress_level=1,
+            optimize=False,
+            icc_profile=None,
+            exif=b"",
+            pnginfo=None,
+        )
+        descriptor = os.open(sanitized, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        connection.send(("ok", None))
+    except RemovalFailure as failure:
+        connection.send(
+            (
+                "failure",
+                (
+                    failure.code,
+                    failure.safe_message,
+                    failure.category,
+                    failure.phase,
+                    failure.retryable,
+                ),
+            )
+        )
+    except (MemoryError, OSError):
+        with suppress(BrokenPipeError, EOFError, OSError):
+            connection.send(("limit", None))
+    except BaseException:
+        with suppress(BrokenPipeError, EOFError, OSError):
+            connection.send(("crash", None))
+    finally:
+        connection.close()
+
+
+def _apply_decode_limits(source: ImageInput, budget: DecodeBudget) -> None:
+    _set_limit(resource.RLIMIT_AS, budget.address_space_bytes)
+    _set_limit(resource.RLIMIT_CPU, budget.cpu_seconds)
+    maximum_file = min(
+        budget.address_space_bytes,
+        max(1024 * 1024, source.width * source.height * 5 + 1024 * 1024),
+    )
+    _set_limit(resource.RLIMIT_FSIZE, maximum_file)
+    signal.signal(signal.SIGXFSZ, signal.SIG_DFL)
+
+
+def _set_limit(kind: int, requested: int) -> None:
+    _soft, hard = resource.getrlimit(kind)
+    value = requested if hard == resource.RLIM_INFINITY else min(requested, hard)
+    resource.setrlimit(kind, (value, value))
+
+
+def _arm_parent_death_signal(expected_parent: int) -> None:
+    """Linux parent-death binding; the PID check closes the prctl race."""
+
+    try:
+        import ctypes
+
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.prctl(1, signal.SIGKILL, 0, 0, 0) != 0:
+            raise OSError(ctypes.get_errno(), "prctl(PR_SET_PDEATHSIG) failed")
+        if os.getppid() != expected_parent:
+            os.kill(os.getpid(), signal.SIGKILL)
+    except ImportError:
+        # This project targets Linux.  Keeping the child resource-bounded is a
+        # safe fallback for import-only analysis on another POSIX platform.
+        return
+
+
+def _load_sanitized(path: Path, source: ImageInput) -> DecodedImage:
+    try:
+        with Image.open(path) as opened:
+            if (
+                opened.format != "PNG"
+                or opened.mode != "RGBA"
+                or opened.size != (source.width, source.height)
+                or opened.info
+            ):
+                raise OSError("sanitized decoder output has an invalid profile")
+            opened.load()
+            rgba = opened.copy()
+    except (OSError, UnidentifiedImageError, ValueError) as exc:
+        raise RemovalFailure(
+            "background.input-unreadable",
+            "The isolated image decoder returned an invalid result.",
+            "input",
+            "decode",
+        ) from exc
+    return DecodedImage(rgba, rgba.getchannel("A"))
 
 
 def decode_image(source: ImageInput, limits: Limits) -> DecodedImage:

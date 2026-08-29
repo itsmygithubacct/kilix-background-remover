@@ -102,8 +102,9 @@ def test_tui_narrow_render_is_deterministic() -> None:
     assert len(render_progress(progress, 1)) == 1
 
 
-def test_product_source_has_no_network_or_process_execution_imports() -> None:
-    forbidden_roots = {"aiohttp", "http", "requests", "socket", "subprocess", "urllib"}
+def test_product_source_has_no_network_and_only_fixed_video_process_authority() -> None:
+    network_roots = {"aiohttp", "http", "requests", "socket", "urllib"}
+    process_modules: list[str] = []
     for path in sorted((ROOT / "src" / "kilix_background_remover").glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         imports: set[str] = set()
@@ -112,4 +113,14 @@ def test_product_source_has_no_network_or_process_execution_imports() -> None:
                 imports.update(alias.name.split(".", 1)[0] for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
                 imports.add(node.module.split(".", 1)[0])
-        assert not imports & forbidden_roots, (path.name, imports & forbidden_roots)
+        assert not imports & network_roots, (path.name, imports & network_roots)
+        if "subprocess" in imports:
+            process_modules.append(path.name)
+
+    from kilix_background_remover.video import FFMPEG, FFPROBE
+
+    video_source = (ROOT / "src/kilix_background_remover/video.py").read_text(encoding="utf-8")
+    assert process_modules == ["video.py"]
+    assert Path("/usr/bin/ffmpeg") == FFMPEG
+    assert Path("/usr/bin/ffprobe") == FFPROBE
+    assert "shell=True" not in video_source

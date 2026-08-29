@@ -6,6 +6,7 @@ import argparse
 import importlib.util
 import json
 import os
+import tempfile
 from collections.abc import Sequence
 from importlib.metadata import version
 from pathlib import Path
@@ -15,6 +16,13 @@ from .contracts import parse_request, sha256_file
 from .errors import RemovalFailure
 from .frontend import describe_image, load_json_document, make_request, stable_output_key
 from .jobs import BatchEntry, BatchRunner
+from .video import (
+    ReferenceFrameMasker,
+    VideoOutputKind,
+    VideoRequest,
+    estimate_video,
+    run_video,
+)
 from .worker import (
     FALLBACK_REQUEST_ID,
     JobOutcome,
@@ -42,6 +50,30 @@ def _parser() -> argparse.ArgumentParser:
     _add_image_options(batch)
     batch.add_argument("input_dir", type=Path)
     batch.add_argument("--state-dir", type=Path)
+
+    video = subcommands.add_parser(
+        "video",
+        help="estimate or run one confirmed bounded offline-video job",
+    )
+    video.add_argument("input", type=Path)
+    video.add_argument("output", type=Path)
+    video.add_argument(
+        "--output-kind",
+        choices=[kind.value for kind in VideoOutputKind],
+        required=True,
+    )
+    video.add_argument("--confirm-estimate", metavar="SHA256")
+    video.add_argument("--reference-profile", action="store_true")
+    video.add_argument("--no-audio", action="store_true")
+    video.add_argument("--raw-frames", action="store_true")
+    video.add_argument("--smoothing-radius-frames", type=int, default=1)
+    video.add_argument("--batch-frames", type=int, default=24)
+    video.add_argument("--scene-cut-threshold-u8", type=int, default=48)
+    video.add_argument("--gif-alpha-threshold-u8", type=int, default=128)
+    video.add_argument("--state-dir", type=Path)
+    video_background = video.add_mutually_exclusive_group()
+    video_background.add_argument("--background-image", type=Path)
+    video_background.add_argument("--background-video", type=Path)
 
     doctor = subcommands.add_parser("doctor", help="report local reference readiness")
     doctor.add_argument("--json", action="store_true")
@@ -188,6 +220,77 @@ def _batch_command(args: argparse.Namespace) -> int:
     return 0 if all(item.outcome.ok for item in outcomes) else 3
 
 
+def _video_command(args: argparse.Namespace) -> int:
+    request = VideoRequest(
+        source=args.input,
+        destination=args.output.absolute(),
+        output_kind=VideoOutputKind(args.output_kind),
+        confirmation_sha256=args.confirm_estimate,
+        no_audio=args.no_audio,
+        raw_frames=args.raw_frames,
+        smoothing_radius_frames=args.smoothing_radius_frames,
+        batch_frames=args.batch_frames,
+        scene_cut_threshold_u8=args.scene_cut_threshold_u8,
+        gif_alpha_threshold_u8=args.gif_alpha_threshold_u8,
+        background_image=args.background_image,
+        background_video=args.background_video,
+        state_dir=args.state_dir,
+    )
+    _probe, estimate = estimate_video(request)
+    if args.confirm_estimate is None:
+        print(
+            _json(
+                {
+                    "status": "confirmation-required",
+                    "estimate": estimate.wire(),
+                }
+            ),
+            end="",
+        )
+        return 0
+    if args.confirm_estimate != estimate.confirmation_sha256:
+        raise RemovalFailure(
+            "background.invalid-request",
+            "The exact video time/frame/disk estimate has not been confirmed.",
+            "input",
+            "confirm-estimate",
+        )
+    if not args.reference_profile:
+        print(_json({"error": _profile_failure(FALLBACK_REQUEST_ID)}), end="")
+        return 3
+    with (
+        tempfile.TemporaryDirectory(prefix="kilix-f108-video-provider-") as temporary,
+        ReferenceFrameMasker(Path(temporary)) as masker,
+    ):
+        result = run_video(request, masker)
+    print(
+        _json(
+            {
+                "status": "committed",
+                "result": {
+                    "destination": str(result.destination),
+                    "kind": result.kind.value,
+                    "media_type": result.media_type,
+                    "sha256": result.sha256,
+                    "bytes": result.bytes,
+                    "width": result.width,
+                    "height": result.height,
+                    "frame_count": result.frame_count,
+                    "duration_seconds": result.duration_seconds,
+                    "audio_preserved": result.audio_preserved,
+                    "raw_frames": result.raw_frames,
+                    "smoothing_radius_frames": result.smoothing_radius_frames,
+                    "batch_frames": result.batch_frames,
+                    "scene_cut_frames": list(result.scene_cut_frames),
+                    "gif_alpha_threshold_u8": result.gif_alpha_threshold_u8,
+                },
+            }
+        ),
+        end="",
+    )
+    return 0
+
+
 def _doctor(json_output: bool) -> int:
     profile_id, digest = reference_identity()
     package_model = Path(__file__).with_name("reference_luma.onnx")
@@ -220,6 +323,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _image_command(args)
         if args.command == "batch":
             return _batch_command(args)
+        if args.command == "video":
+            return _video_command(args)
         if args.command == "doctor":
             return _doctor(args.json)
     except RemovalFailure as failure:

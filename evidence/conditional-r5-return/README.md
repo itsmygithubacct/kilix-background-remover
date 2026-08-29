@@ -36,20 +36,20 @@ JSONL ledger and a separate summary. `EVIDENCE-SHA256SUMS` binds all `6/6`.
 ## Installed execution identity
 
 - product wheel SHA-256:
-  `d6897ad3efb3b8d3ec075dc4cc90845ac01ad7918e307f080fa06c0b595f4b93`
-- product sdist SHA-256:
-  `ff121e2d4ec131e85adc2cc50ebaac5e67852491aff9308f13a7a33a9cbc50d6`
+  `4f8712c6e53e8f394412ece86a6361001a64a3e64720c69cc345a61c8e5a79e0`
 - carrier distribution: `kilix-f108-f115-contracts==0.2.1.dev5`
 - carrier wheel SHA-256:
   `73ce62f29329d6f1999aa79a765c44476d323641a9e2f7f5b73387735d387e4e`
 - carrier sdist SHA-256:
   `b208503754691076a8f5e92cb7303ca5f3f451905fa759afd0e0606e7017d929`
 
-The final generator ran from a fresh offline virtual environment under
-`python -I`, with an empty current directory. The exact installed product and
-carrier wheels were explicit installer inputs. The product gate before this
-generation passed corpus `3/3`, suite `91/91`, formatting `36/36`, typing
-`18/18`, and build artifacts `2/2` using pinned uv `0.12.5`.
+The PREP8 continuation generator ran from a fresh offline virtual environment
+under `python -I`, with an empty current directory. The exact installed product
+and carrier wheels were explicit installer inputs. All canonical machine
+records reproduced byte-for-byte (`6/6`). The product gate before this
+generation passed corpus `3/3`, suite `131/131`, lint `1/1`, formatting
+`42/42`, typing `20/20`, and two byte-identical source/wheel builds (`4/4`
+artifacts across `2/2` build passes) using pinned uv `0.12.5`.
 
 ## Reproduction
 

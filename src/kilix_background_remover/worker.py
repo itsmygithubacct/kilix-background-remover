@@ -30,7 +30,7 @@ from .atomic import (
 from .cancellation_v2 import DurableCancellationGate, TerminalState
 from .contract_v2 import ContractRefusal, canonical_bytes, strict_decode
 from .contracts import RemovalRequest, parse_request, sha256_file
-from .decode import decode_image
+from .decode import decode_image_bounded
 from .errors import RemovalFailure, diagnostic_reference
 from .postprocess import (
     apply_edge_policy,
@@ -324,7 +324,7 @@ def _execute(
     emit("loading", 0.05, "resolve-profile")
     session = _load_session(request, model_path, cached)
     emit("loading", 0.15, "load-model")
-    decoded = decode_image(request.input, request.limits)
+    decoded = decode_image_bounded(request.input, request.limits)
     emit("running", 0.30, "decode")
     emit("running", 0.40, "preprocess")
     mask, warnings = _run_onnx_mask(session, decoded.image, cancel)
@@ -334,7 +334,7 @@ def _execute(
 
     background_image: Image.Image | None = None
     if request.background_image is not None:
-        background_image = decode_image(request.background_image, request.limits).image
+        background_image = decode_image_bounded(request.background_image, request.limits).image
 
     staged: list[StagedImage] = []
     try:
@@ -622,7 +622,9 @@ class WorkerSupervisor:
                 str(self._cancellation_database),
             ),
             name="kilix-background-remover-worker",
-            daemon=True,
+            # The worker creates disposable, resource-limited parser children.
+            # multiprocessing forbids daemon processes from spawning them.
+            daemon=False,
         )
         self._process.start()
         child.close()

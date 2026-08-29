@@ -21,6 +21,7 @@ from __future__ import annotations
 import errno
 import hashlib
 import os
+import stat
 import subprocess
 import sys
 import textwrap
@@ -32,9 +33,11 @@ from PIL import Image
 
 from kilix_background_remover.atomic import (
     StagedImage,
+    allocate_staging_path,
     cleanup_staging_files,
     commit_staged,
     discard_staged,
+    finalize_staged_file,
     stage_image,
 )
 from kilix_background_remover.errors import RemovalFailure
@@ -365,3 +368,105 @@ def test_kernel_write_limit_during_real_png_encode_cleans_staging(tmp_path: Path
     assert not list(tmp_path.glob(".kilix-f108-*.stage")), (
         "staging residue survived the kernel write refusal"
     )
+
+
+def test_external_encoder_cannot_replace_the_reserved_inode(tmp_path: Path) -> None:
+    destination = tmp_path / "output.mkv"
+    reserved = allocate_staging_path(destination, staging_token=TOKEN)
+    reserved.stage.unlink()
+    reserved.stage.write_bytes(b"replacement inode")
+
+    with pytest.raises(RemovalFailure, match="could not be verified") as raised:
+        finalize_staged_file(
+            reserved,
+            media_type="video/x-matroska",
+            kind="matte",
+            max_output_bytes=MB,
+            verify=lambda _path: None,
+        )
+
+    assert isinstance(raised.value.__cause__, OSError)
+    assert str(raised.value.__cause__) == "the encoder replaced its reserved staging inode"
+    assert not destination.exists()
+    assert not reserved.stage.exists()
+
+
+def test_external_encoder_byte_limit_is_checked_before_verification(tmp_path: Path) -> None:
+    destination = tmp_path / "output.mkv"
+    reserved = allocate_staging_path(destination, staging_token=TOKEN)
+    reserved.stage.write_bytes(b"x" * 17)
+    verified = False
+
+    def verify(_path: Path) -> None:
+        nonlocal verified
+        verified = True
+
+    with pytest.raises(RemovalFailure, match="byte limit"):
+        finalize_staged_file(
+            reserved,
+            media_type="video/x-matroska",
+            kind="matte",
+            max_output_bytes=16,
+            verify=verify,
+        )
+
+    assert not verified
+    assert not destination.exists()
+    assert not reserved.stage.exists()
+
+
+def test_external_encoder_output_is_private_verified_and_atomically_committed(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "output.mkv"
+    payload = b"qualified encoded bytes"
+    reserved = allocate_staging_path(destination, staging_token=TOKEN)
+    reserved.stage.write_bytes(payload)
+    staged = finalize_staged_file(
+        reserved,
+        media_type="video/x-matroska",
+        kind="matte",
+        max_output_bytes=MB,
+        verify=lambda path: path.read_bytes() == payload or pytest.fail("wrong payload"),
+    )
+
+    assert stat.S_IMODE(reserved.stage.stat().st_mode) == 0o600
+    assert staged.bytes == len(payload)
+    assert staged.sha256 == hashlib.sha256(payload).hexdigest()
+    commit_staged([staged])
+
+    assert destination.read_bytes() == payload
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o600
+    assert not reserved.stage.exists()
+
+
+def test_external_encoder_output_cannot_change_during_verification(tmp_path: Path) -> None:
+    destination = tmp_path / "output.mkv"
+    reserved = allocate_staging_path(destination, staging_token=TOKEN)
+    reserved.stage.write_bytes(b"before")
+
+    def mutate(path: Path) -> None:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        try:
+            os.write(descriptor, b"AFTER!")
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.chmod(path, 0o600)
+
+    with pytest.raises(RemovalFailure, match="could not be verified") as raised:
+        finalize_staged_file(
+            reserved,
+            media_type="video/x-matroska",
+            kind="matte",
+            max_output_bytes=MB,
+            verify=mutate,
+        )
+
+    assert isinstance(raised.value.__cause__, OSError)
+    assert str(raised.value.__cause__) in {
+        "the staged output changed during verification",
+        "the staged output content changed during verification",
+    }
+    assert not destination.exists()
+    assert not reserved.stage.exists()
