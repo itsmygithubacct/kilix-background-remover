@@ -5,12 +5,20 @@ multi-output commit leaves nothing behind.
 Every negative here is causal: the failure is injected at a named boundary and
 the test asserts what the filesystem holds afterwards, not merely that an
 exception was raised.
+
+Write-exhaustion mutation F-1 removes exception-path staging cleanup. In an
+isolated export whose imported production path is asserted before scoring,
+F-1 makes 2/2 write-exhaustion controls fail on named staging residue.
 """
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
+import subprocess
+import sys
+import textwrap
 import threading
 from pathlib import Path
 
@@ -183,3 +191,107 @@ def test_output_byte_ceiling_refuses_before_any_destination_appears(tmp_path: Pa
         )
     assert not destination.exists()
     assert not list(tmp_path.glob(".kilix-f108-*.stage")), "staging residue after a refusal"
+
+
+def test_enospc_during_encode_leaves_no_destination_or_staging_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A partial staging write followed by ENOSPC is fully rolled back."""
+    destination = tmp_path / "mask.png"
+
+    def fail_after_partial_write(self, stream, *args, **kwargs):  # type: ignore[no-untyped-def]
+        stream.write(b"partial encoded output")
+        stream.flush()
+        raise OSError(errno.ENOSPC, "injected full-disk refusal")
+
+    monkeypatch.setattr(Image.Image, "save", fail_after_partial_write)
+    with pytest.raises(RemovalFailure, match="staged output could not be verified") as raised:
+        stage_image(
+            Image.new("L", (256, 256), 200),
+            destination,
+            image_format="PNG",
+            media_type="image/png",
+            kind="mask",
+            max_output_bytes=MB,
+            staging_token=TOKEN,
+        )
+
+    assert isinstance(raised.value.__cause__, OSError)
+    assert raised.value.__cause__.errno == errno.ENOSPC
+    assert not destination.exists(), "a destination appeared after ENOSPC"
+    assert not list(tmp_path.glob(".kilix-f108-*.stage")), "staging residue survived ENOSPC"
+
+
+def test_kernel_write_limit_during_real_png_encode_cleans_staging(tmp_path: Path) -> None:
+    """A real kernel EFBIG during Pillow encoding exercises the same cleanup.
+
+    RLIMIT_FSIZE is process-wide, so the control runs in a child. The child
+    requires EFBIG as the causal exception; an output-byte-limit refusal or an
+    unrelated encode failure cannot satisfy it.
+    """
+    destination = tmp_path / "mask.png"
+    child = textwrap.dedent(
+        """
+        import errno
+        import random
+        import resource
+        import signal
+        import sys
+        from pathlib import Path
+
+        from PIL import Image
+
+        from kilix_background_remover.atomic import stage_image
+        from kilix_background_remover.errors import RemovalFailure
+
+        directory = Path(sys.argv[1])
+        destination = directory / "mask.png"
+        before = resource.getrlimit(resource.RLIMIT_FSIZE)
+        signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+        resource.setrlimit(resource.RLIMIT_FSIZE, (4096, before[1]))
+        try:
+            image = Image.frombytes(
+                "L", (1024, 1024), random.Random(108).randbytes(1024 * 1024)
+            )
+            try:
+                stage_image(
+                    image,
+                    destination,
+                    image_format="PNG",
+                    media_type="image/png",
+                    kind="mask",
+                    max_output_bytes=2 * 1024 * 1024,
+                    staging_token="0" * 32,
+                )
+            except RemovalFailure as failure:
+                cause = failure.__cause__
+                if not (
+                    failure.code == "background.output-failed"
+                    and failure.phase == "verify-output"
+                    and isinstance(cause, OSError)
+                    and cause.errno == errno.EFBIG
+                ):
+                    print(repr(failure), repr(cause), file=sys.stderr)
+                    raise SystemExit(12)
+            else:
+                raise SystemExit(13)
+        finally:
+            resource.setrlimit(resource.RLIMIT_FSIZE, before)
+        """
+    )
+    environment = os.environ.copy()
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    completed = subprocess.run(
+        [sys.executable, "-c", child, str(tmp_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=environment,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert not destination.exists(), "a destination appeared after the kernel write refusal"
+    assert not list(tmp_path.glob(".kilix-f108-*.stage")), (
+        "staging residue survived the kernel write refusal"
+    )
