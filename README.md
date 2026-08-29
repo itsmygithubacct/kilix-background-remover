@@ -18,21 +18,23 @@ H1/H2/H3 qualification remain separate release gates.
 
 ## Development
 
-The repository requires the release-frozen `uv` 0.12.5 tool.
+The repository requires the release-frozen `uv` 0.12.5 executable with
+SHA-256 `b65f23a420c4acc96427efb30e5ed9bc0f7e25d2d712000f6ede77c1a0de5f46`.
+Set `UV` to its absolute path; the gate refuses a version or digest mismatch.
 
 ```sh
-uv sync --locked --all-groups
-make check
+UV=/absolute/path/to/release-pinned-uv-0.12.5
+make setup UV="$UV"
+make check UV="$UV"
 ```
 
 Regenerate and verify the owned corpus:
 
 ```sh
-uv run --frozen python tools/generate_corpus.py --root tests/fixtures/corpus
-uv run --frozen pytest tests/test_corpus.py
+"$UV" run --frozen python tools/generate_corpus.py --root tests/fixtures/corpus
+"$UV" run --frozen pytest tests/test_corpus.py
 ```
 
 No application path opens a listener or downloads a runtime/model. Product
 integration with the Kilix host, `kilix-content`, F106 and Plebian OS is not
 present on this branch.
-

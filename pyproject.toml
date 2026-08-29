@@ -31,7 +31,7 @@ kilix-background-remover-tui = "kilix_background_remover.tui:main"
 kilix-background-remover-app-bridge = "kilix_background_remover.app_bridge:main"
 
 [tool.uv]
-required-version = "==0.12.3"
+required-version = "==0.12.5"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kilix_background_remover"]
