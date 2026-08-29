@@ -9,6 +9,11 @@ exception was raised.
 Write-exhaustion mutation F-1 removes exception-path staging cleanup. In an
 isolated export whose imported production path is asserted before scoring,
 F-1 makes 2/2 write-exhaustion controls fail on named staging residue.
+
+Metadata mutations M-1 and M-2 independently remove the encoder stripping
+arguments and post-encode inspection. In two isolated exports whose imported
+production paths are asserted before scoring, both 2/2 mutations are killed:
+M-1 retains the PNG ICC profile and M-2 admits the hostile encoder's profile.
 """
 
 from __future__ import annotations
@@ -175,6 +180,71 @@ def test_staged_file_is_private_and_verified(tmp_path: Path) -> None:
         decoded.load()
         assert decoded.size == (16, 16)
     discard_staged([staged])
+
+
+@pytest.mark.parametrize(
+    ("image_format", "suffix", "media_type"),
+    [("PNG", ".png", "image/png"), ("WEBP", ".webp", "image/webp")],
+)
+def test_sensitive_metadata_is_stripped_without_mutating_the_source(
+    tmp_path: Path, image_format: str, suffix: str, media_type: str
+) -> None:
+    image = Image.new("RGBA", (16, 16), (11, 22, 33, 44))
+    image.info.update(
+        {
+            "icc_profile": b"kilix-sensitive-icc-profile",
+            "exif": b"Exif\x00\x00kilix-sensitive-exif",
+            "xmp": b"kilix-sensitive-xmp",
+            "Comment": "kilix-sensitive-comment",
+        }
+    )
+    source_info = image.info.copy()
+
+    staged = stage_image(
+        image,
+        tmp_path / f"cutout{suffix}",
+        image_format=image_format,
+        media_type=media_type,
+        kind="cutout",
+        max_output_bytes=MB,
+        staging_token=TOKEN,
+    )
+    with Image.open(staged.stage) as decoded:
+        decoded.load()
+        assert not {"icc_profile", "exif", "xmp", "Comment"} & decoded.info.keys()
+    assert image.info == source_info, "metadata stripping mutated the caller's image"
+    discard_staged([staged])
+
+
+def test_staging_refuses_if_the_encoder_reintroduces_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Post-encode verification is the backstop if encoder defaults regress."""
+    real_save = Image.Image.save
+
+    def leaky_save(self, stream, *args, **kwargs):  # type: ignore[no-untyped-def]
+        kwargs["icc_profile"] = b"kilix-injected-sensitive-profile"
+        return real_save(self, stream, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", leaky_save)
+    destination = tmp_path / "cutout.png"
+    with pytest.raises(RemovalFailure, match="staged output could not be verified") as raised:
+        stage_image(
+            Image.new("RGBA", (16, 16), (11, 22, 33, 44)),
+            destination,
+            image_format="PNG",
+            media_type="image/png",
+            kind="cutout",
+            max_output_bytes=MB,
+            staging_token=TOKEN,
+        )
+
+    assert isinstance(raised.value.__cause__, OSError)
+    assert str(raised.value.__cause__) == "encoded output retained metadata: icc_profile"
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".kilix-f108-*.stage")), (
+        "staging residue survived metadata verification"
+    )
 
 
 def test_output_byte_ceiling_refuses_before_any_destination_appears(tmp_path: Path) -> None:

@@ -13,6 +13,11 @@ from PIL import Image
 
 from .errors import RemovalFailure
 
+_DECODER_BOOKKEEPING = {
+    "PNG": frozenset(),
+    "WEBP": frozenset({"background", "duration", "loop", "timestamp"}),
+}
+
 
 @dataclass(slots=True)
 class StagedImage:
@@ -53,9 +58,24 @@ def stage_image(
         )
     save_args: dict[str, object] = {}
     if image_format == "PNG":
-        save_args = {"compress_level": 9, "optimize": False}
+        save_args = {
+            "compress_level": 9,
+            "optimize": False,
+            "icc_profile": None,
+            "exif": b"",
+            "pnginfo": None,
+            "transparency": None,
+        }
     elif image_format == "WEBP":
-        save_args = {"lossless": True, "quality": 100, "method": 6, "exact": True}
+        save_args = {
+            "lossless": True,
+            "quality": 100,
+            "method": 6,
+            "exact": True,
+            "icc_profile": b"",
+            "exif": b"",
+            "xmp": b"",
+        }
     descriptor, temporary = tempfile.mkstemp(
         prefix=f".kilix-f108-{staging_token}.", suffix=".stage", dir=parent
     )
@@ -78,6 +98,12 @@ def stage_image(
             check.load()
             if check.size != image.size:
                 raise OSError("encoded geometry mismatch")
+            unexpected_metadata = set(check.info) - _DECODER_BOOKKEEPING.get(
+                image_format, frozenset()
+            )
+            if unexpected_metadata:
+                names = ", ".join(sorted(unexpected_metadata))
+                raise OSError(f"encoded output retained metadata: {names}")
     except Exception as exc:
         stage.unlink(missing_ok=True)
         if isinstance(exc, RemovalFailure):
