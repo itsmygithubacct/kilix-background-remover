@@ -111,9 +111,25 @@ def _fixtures(root: Path, bounded_fixture: Path) -> dict[str, Path]:
     image = root / "subject.png"
     background = root / "background.png"
     cancellation = root / "cancellation.png"
-    Image.new("RGBA", (16, 12), (180, 90, 40, 255)).save(image)
+    subject = Image.new("RGBA", (16, 12))
+    subject.putdata(
+        [
+            ((x * 17 + y * 5) % 256, (x * 3 + y * 23) % 256, (x * 11 + y * 7) % 256, 255)
+            for y in range(12)
+            for x in range(16)
+        ]
+    )
+    subject.save(image)
     Image.new("RGBA", (16, 12), (10, 190, 80, 255)).save(background)
-    Image.new("RGBA", (768, 512), (150, 70, 220, 255)).save(cancellation)
+    cancellation_image = Image.new("RGBA", (768, 512))
+    cancellation_image.putdata(
+        [
+            ((x * 5 + y) % 256, (x + y * 3) % 256, (x * 7 + y * 11) % 256, 255)
+            for y in range(512)
+            for x in range(768)
+        ]
+    )
+    cancellation_image.save(cancellation)
     source = root / "source.mkv"
     background_video = root / "background.mkv"
     _ffmpeg(
