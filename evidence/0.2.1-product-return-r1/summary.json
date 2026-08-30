@@ -35,6 +35,10 @@
     "passed": 5,
     "total": 5
   },
+  "od22_successor_product_byte_coverage": {
+    "passed": 0,
+    "total": 1
+  },
   "product": {
     "branch": "work/0.2.1-f108",
     "commit": "d8c74998f8fd8b00ee7da34e3107fb42a21286ea",

@@ -730,6 +730,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "f115_provider_capabilities": {"passed": 5, "total": 5},
         "f115_external_gate_disposition": {"passed": 0, "total": 1},
         "od22_independent_adjudication": {"passed": 5, "total": 5},
+        "od22_successor_product_byte_coverage": {"passed": 0, "total": 1},
         "g5b_freeze": {"passed": 0, "total": 1},
         "acceptance": {"passed": 0, "total": 1},
         "provider_refusals_received": {"passed": 0, "total": 0},
@@ -743,9 +744,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "image, bounded-decode, 6/6 offline-video, temporal-smoothing, atomic-output, "
         "CLI, TUI, contained-app and F115-provider-port results.\n\n"
         "The synthetic reference graph is untrained and not release qualified. "
-        "The independently adjudicated OD-22 return remains passed 5/5; G5b freeze "
-        "remains 0/1, F108 acceptance remains 0/1, and the F115-owned external Gate "
-        "8 disposition remains 0/1.\n"
+        "The parent-bound independently adjudicated OD-22 return remains passed "
+        "5/5, while its product-byte coverage for this successor remains 0/1. "
+        "G5b freeze remains 0/1, F108 acceptance remains 0/1, and the F115-owned "
+        "external Gate 8 disposition remains 0/1.\n"
     )
     (output / "README.md").write_text(readme, encoding="utf-8")
     work.rmdir()
