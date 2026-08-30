@@ -11,6 +11,7 @@ import pytest
 from PIL import Image
 
 import kilix_background_remover.cli as cli
+import kilix_background_remover.provider as provider_module
 
 
 @pytest.fixture(scope="module")
@@ -89,7 +90,7 @@ def test_video_cli_rejects_wrong_confirmation_before_provider_or_output(
     def provider_must_not_start(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("provider started before confirmation")
 
-    monkeypatch.setattr(cli, "ReferenceFrameMasker", provider_must_not_start)
+    monkeypatch.setattr(provider_module, "ReferenceFrameMasker", provider_must_not_start)
     arguments = [
         *_arguments(one_frame_video, destination),
         "--confirm-estimate",
@@ -106,13 +107,16 @@ def test_video_cli_rejects_wrong_confirmation_before_provider_or_output(
 
 
 class _FastMasker:
-    def __init__(self, _workspace: Path) -> None:
+    def __init__(self, _workspace: Path, **_kwargs: object) -> None:
         pass
 
     def __enter__(self) -> _FastMasker:
         return self
 
     def __exit__(self, *_args: object) -> None:
+        pass
+
+    def close(self) -> None:
         pass
 
     def __call__(
@@ -135,7 +139,7 @@ def test_video_cli_commits_only_the_exact_confirmed_estimate(
     assert cli.main(arguments) == 0
     estimate_document = json.loads(capsys.readouterr().out)
     confirmation = estimate_document["estimate"]["confirmation_sha256"]
-    monkeypatch.setattr(cli, "ReferenceFrameMasker", _FastMasker)
+    monkeypatch.setattr(provider_module, "ReferenceFrameMasker", _FastMasker)
 
     assert (
         cli.main(

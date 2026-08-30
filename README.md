@@ -1,15 +1,17 @@
 # Kilix Background Remover
 
-Local-first image cutout provider for Plebian OS / Kilix 0.2.1. The repository
+Local-first image and offline-video cutout provider for Plebian OS / Kilix
+0.2.1. The repository
 is a clean-room Apache-2.0 implementation. It is local-only during development;
 qualification does not authorize a remote, tag, artifact, or publication.
 
 The current implementation line consumes the candidate-R5 F108/F115 mask-first
 `/v2` JSON contracts and freezes a deterministic, wholly synthetic image/mask
-corpus. It contains a supervised reference worker used to exercise bounded
-decode, first-class masks, compositing, cancellation, batching, atomic output,
-offline video, CLI/TUI and command-free app-bridge behaviour before a release
-model is selected.
+corpus. One `BackgroundRemovalProvider` owns the supervised worker used by all
+5/5 product surfaces: provider port, CLI, TUI, contained app, and the F115
+editable-mask boundary. It exercises bounded decode, first-class masks,
+compositing, cancellation, batching, atomic output, and offline video before a
+release model is selected.
 
 The carrier is pinned exactly to
 `kilix-f108-f115-contracts==0.2.1.dev5`, wheel SHA-256
@@ -90,6 +92,43 @@ publication, the staged carrier is decoded again and its authoritative mask,
 alpha, or RGB plane is compared with every rendered frame; a metadata-valid but
 pixel-wrong encoder result is refused.
 
+The installed wheel exposes 5/5 executables/surfaces:
+
+```text
+kilix-background-remover                 image, batch and video CLI
+kilix-background-remover-tui             keyboard TUI for image/video requests
+kilix-background-remover-app             contained graphical app and headless lifecycle
+kilix-background-remover-app-bridge      bounded command-free app bridge
+kilix-background-remover-provider        length-framed F115 provider port
+```
+
+All 5/5 enter the same provider façade. The per-frame video adapter is lent the
+provider's existing supervised worker; it does not create a second inference
+path. `kilix-background-remover doctor --json` reports the installed decode
+budgets, the 6/6 video kinds and the exact candidate manifest identity.
+
+The TUI accepts either a canonical candidate-R5 image request or a fixed-field
+video request. It exposes q/Escape cancellation and r retry, and reports the
+decode/model/backend/resource policy before work starts:
+
+```sh
+kilix-background-remover-tui image-request.json --reference-profile
+kilix-background-remover-tui video-request.json \
+  --operation video --reference-profile
+```
+
+`kilix-background-remover-app` opens the contained graphical client. The same
+controller has a display-independent lifecycle form used for installed package
+qualification:
+
+```sh
+kilix-background-remover-app --message app-message.json --reference-profile
+```
+
+The bridge accepts only fixed operations and typed paths. It accepts 0/7 shell
+commands, environment variables, model URLs, download URLs, import names,
+listener addresses or remote schema URLs.
+
 `kilix_background_remover.editable_mask` is the in-repository pane-4 reference
 consumer for F115. `consume_editable_mask_transcript` validates the full
 candidate-R5 `/v2` transcript, all request/result identity joins and the exact
@@ -100,3 +139,10 @@ document unchanged, and provider-controlled prose is never rendered.
 it submits a real composited layer through the supervised provider, retains the
 reported threshold/feather settings, validates the resulting transcript and
 commits only a sealed, sample-digest-revalidated immutable mask plan.
+
+The separately installed F115 consumer does not import those implementation
+modules. It uses `kilix-background-remover-provider`, whose exact byte protocol
+is specified in [docs/F115-PROVIDER-PORT-v1.md](docs/F115-PROVIDER-PORT-v1.md).
+The port provides discovery, canonical request/progress/terminal transport,
+durable cancellation, and owned-session teardown. F108 supplies that port;
+the external F108-to-F115 Gate 8 disposition remains F115-owned at 0/1.

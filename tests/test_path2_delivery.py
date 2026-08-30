@@ -86,9 +86,11 @@ def test_p2_4_no_source_file_can_fetch_an_artifact() -> None:
 def test_p2_4_no_delivery_path_exists_and_the_absence_is_refused_loudly() -> None:
     """With no qualified profile installed, the product must refuse rather than
     silently fall back to the development reference."""
-    surfaces = ["cli.py", "tui.py", "app_bridge.py"]
+    provider = (PACKAGE / "provider.py").read_text(encoding="utf-8")
+    assert "No release-qualified model profile is installed." in provider
+    surfaces = ["cli.py", "tui.py", "app_bridge.py", "app.py", "provider_port.py"]
     for name in surfaces:
         text = (PACKAGE / name).read_text(encoding="utf-8")
-        assert "No release-qualified model profile is installed." in text, (
-            f"{name} lost its refusal for the absent-profile case"
+        assert "BackgroundRemovalProvider" in text, (
+            f"{name} bypasses the one provider that owns the absent-profile refusal"
         )

@@ -6,7 +6,6 @@ import argparse
 import importlib.util
 import json
 import os
-import tempfile
 from collections.abc import Sequence
 from importlib.metadata import version
 from pathlib import Path
@@ -15,21 +14,15 @@ from typing import cast
 from .contracts import parse_request, sha256_file
 from .errors import RemovalFailure
 from .frontend import describe_image, load_json_document, make_request, stable_output_key
-from .jobs import BatchEntry, BatchRunner
-from .video import (
-    ReferenceFrameMasker,
-    VideoOutputKind,
-    VideoRequest,
-    estimate_video,
-    run_video,
+from .jobs import BatchEntry
+from .provider import (
+    BackgroundRemovalProvider,
+    profile_failure_wire,
+    provider_identity,
+    video_result_wire,
 )
-from .worker import (
-    FALLBACK_REQUEST_ID,
-    JobOutcome,
-    WorkerSupervisor,
-    failure_wire,
-    reference_identity,
-)
+from .video import VideoOutputKind, VideoRequest
+from .worker import FALLBACK_REQUEST_ID, JobOutcome, failure_wire, reference_identity
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -96,23 +89,13 @@ def _json(value: object) -> str:
 
 
 def _profile_failure(request_id: str) -> dict[str, object]:
-    return failure_wire(
-        request_id,
-        RemovalFailure(
-            "background.profile-unavailable",
-            "No release-qualified model profile is installed.",
-            "provider",
-            "resolve-profile",
-        ),
-    )
+    return profile_failure_wire(request_id)
 
 
 def _run(raw: object, allow_reference: bool) -> JobOutcome:
-    parsed = parse_request(raw)
-    if not allow_reference:
-        return JobOutcome(None, _profile_failure(parsed.request_id), [])
-    with WorkerSupervisor() as supervisor:
-        return supervisor.run(raw)
+    parse_request(raw)
+    with BackgroundRemovalProvider(allow_reference_profile=allow_reference) as provider:
+        return provider.run(raw)
 
 
 def _outcome_wire(outcome: JobOutcome) -> dict[str, object]:
@@ -202,8 +185,8 @@ def _batch_command(args: argparse.Namespace) -> int:
         entries.append(BatchEntry(key, request))
     state_dir = args.state_dir or (args.output_dir / ".kilix-background-remover-state")
     state_dir.mkdir(mode=0o700, parents=False, exist_ok=True)
-    with WorkerSupervisor() as supervisor:
-        outcomes = BatchRunner(supervisor).run(entries, state_dir=state_dir)
+    with BackgroundRemovalProvider(allow_reference_profile=True) as provider:
+        outcomes = provider.run_batch(entries, state_dir=state_dir)
     wire = {
         "schema": "kilix.background-removal.batch-report/v1",
         "items": [
@@ -236,53 +219,38 @@ def _video_command(args: argparse.Namespace) -> int:
         background_video=args.background_video,
         state_dir=args.state_dir,
     )
-    _probe, estimate = estimate_video(request)
-    if args.confirm_estimate is None:
-        print(
-            _json(
-                {
-                    "status": "confirmation-required",
-                    "estimate": estimate.wire(),
-                }
-            ),
-            end="",
-        )
-        return 0
-    if args.confirm_estimate != estimate.confirmation_sha256:
-        raise RemovalFailure(
-            "background.invalid-request",
-            "The exact video time/frame/disk estimate has not been confirmed.",
-            "input",
-            "confirm-estimate",
-        )
-    if not args.reference_profile:
-        print(_json({"error": _profile_failure(FALLBACK_REQUEST_ID)}), end="")
-        return 3
-    with (
-        tempfile.TemporaryDirectory(prefix="kilix-f108-video-provider-") as temporary,
-        ReferenceFrameMasker(Path(temporary)) as masker,
-    ):
-        result = run_video(request, masker)
+    with BackgroundRemovalProvider(allow_reference_profile=args.reference_profile) as provider:
+        _probe, estimate = provider.estimate_video(request)
+        if args.confirm_estimate is None:
+            print(
+                _json(
+                    {
+                        "status": "confirmation-required",
+                        "estimate": estimate.wire(),
+                    }
+                ),
+                end="",
+            )
+            return 0
+        if args.confirm_estimate != estimate.confirmation_sha256:
+            raise RemovalFailure(
+                "background.invalid-request",
+                "The exact video time/frame/disk estimate has not been confirmed.",
+                "input",
+                "confirm-estimate",
+            )
+        if not args.reference_profile:
+            print(_json({"error": _profile_failure(FALLBACK_REQUEST_ID)}), end="")
+            return 3
+        result = provider.run_video(request)
     print(
         _json(
             {
                 "status": "committed",
                 "result": {
-                    "destination": str(result.destination),
-                    "kind": result.kind.value,
-                    "media_type": result.media_type,
-                    "sha256": result.sha256,
-                    "bytes": result.bytes,
-                    "width": result.width,
-                    "height": result.height,
-                    "frame_count": result.frame_count,
-                    "duration_seconds": result.duration_seconds,
-                    "audio_preserved": result.audio_preserved,
-                    "raw_frames": result.raw_frames,
-                    "smoothing_radius_frames": result.smoothing_radius_frames,
-                    "batch_frames": result.batch_frames,
-                    "scene_cut_frames": list(result.scene_cut_frames),
-                    "gif_alpha_threshold_u8": result.gif_alpha_threshold_u8,
+                    key: value
+                    for key, value in video_result_wire(result).items()
+                    if key != "schema"
                 },
             }
         ),
@@ -302,6 +270,7 @@ def _doctor(json_output: bool) -> int:
         "artifact_verified": package_model.is_file() and sha256_file(package_model) == digest,
         "onnxruntime_available": importlib.util.find_spec("onnxruntime") is not None,
         "network_listener": False,
+        "provider": provider_identity(),
     }
     if json_output:
         print(_json(report), end="")

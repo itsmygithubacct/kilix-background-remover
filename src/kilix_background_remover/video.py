@@ -1891,13 +1891,20 @@ def _fsync_directory(path: Path) -> None:
 class ReferenceFrameMasker:
     """Adapter that reuses the persistent image worker for offline frames."""
 
-    def __init__(self, workspace: Path, *, deadline_ms: int = 120_000) -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        deadline_ms: int = 120_000,
+        supervisor: Any | None = None,
+    ) -> None:
         from .worker import WorkerSupervisor
 
         self._root = workspace / "frame-provider"
         _ensure_private_directory(self._root)
         self._deadline_ms = deadline_ms
-        self._supervisor = WorkerSupervisor()
+        self._supervisor = supervisor or WorkerSupervisor()
+        self._owns_supervisor = supervisor is None
 
     def __call__(
         self, image: Image.Image, index: int, cancel: threading.Event | None
@@ -1943,7 +1950,8 @@ class ReferenceFrameMasker:
             output_path.unlink(missing_ok=True)
 
     def close(self) -> None:
-        self._supervisor.close()
+        if self._owns_supervisor:
+            self._supervisor.close()
 
     def __enter__(self) -> ReferenceFrameMasker:
         return self

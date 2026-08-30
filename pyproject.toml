@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "kilix-background-remover"
 version = "0.2.1"
-description = "Local-first bounded image cutout provider for Kilix"
+description = "Local-first bounded image and offline-video cutout provider for Kilix"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 license = {file = "LICENSE"}
@@ -33,7 +33,9 @@ dev = [
 [project.scripts]
 kilix-background-remover = "kilix_background_remover.cli:main"
 kilix-background-remover-tui = "kilix_background_remover.tui:main"
+kilix-background-remover-app = "kilix_background_remover.app:main"
 kilix-background-remover-app-bridge = "kilix_background_remover.app_bridge:main"
+kilix-background-remover-provider = "kilix_background_remover.provider_port:main"
 
 [tool.uv]
 required-version = "==0.12.5"
