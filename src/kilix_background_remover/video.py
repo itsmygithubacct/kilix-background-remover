@@ -1604,7 +1604,10 @@ def _verify_encoded(
     actual_relative = [
         timestamp - actual.frame_timestamps[0] for timestamp in actual.frame_timestamps
     ]
-    tolerance = Decimal("0.002")
+    # GIF delays have a centisecond time base. Nearest-centisecond rounding can
+    # move an individual VFR timestamp by at most 5 ms; every other qualified
+    # carrier keeps the tighter 2 ms bound.
+    tolerance = Decimal("0.005") if request.output_kind is VideoOutputKind.GIF else Decimal("0.002")
     if any(
         abs(expected - observed) > tolerance
         for expected, observed in zip(expected_relative, actual_relative, strict=True)

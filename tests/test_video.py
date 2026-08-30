@@ -7,6 +7,7 @@ import os
 import subprocess
 import threading
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -188,6 +189,20 @@ def test_all_required_outputs_are_encoded_and_container_probed(
     kind: VideoOutputKind,
 ) -> None:
     request = _request(media, tmp_path / f"{kind.value}.media", kind)
+    if kind is VideoOutputKind.GIF:
+        quantized_source = tmp_path / "gif-centisecond-source.mkv"
+        _ffmpeg(
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=16x12:rate=3:duration=1",
+            "-c:v",
+            "ffv1",
+            "-pix_fmt",
+            "bgra",
+            str(quantized_source),
+        )
+        request = replace(request, source=quantized_source)
     source_probe, estimate = estimate_video(request)
     confirmed = replace(request, confirmation_sha256=estimate.confirmation_sha256)
 
@@ -204,6 +219,20 @@ def test_all_required_outputs_are_encoded_and_container_probed(
     assert estimate.gif_alpha_threshold_u8 == (
         request.gif_alpha_threshold_u8 if kind is VideoOutputKind.GIF else None
     )
+    if kind is VideoOutputKind.GIF:
+        source_relative = [
+            timestamp - source_probe.frame_timestamps[0]
+            for timestamp in source_probe.frame_timestamps
+        ]
+        output_relative = [
+            timestamp - output_probe.frame_timestamps[0]
+            for timestamp in output_probe.frame_timestamps
+        ]
+        timestamp_delta = max(
+            abs(expected - actual)
+            for expected, actual in zip(source_relative, output_relative, strict=True)
+        )
+        assert Decimal("0.002") < timestamp_delta <= Decimal("0.005")
 
 
 def test_capability_probe_covers_every_required_profile() -> None:
