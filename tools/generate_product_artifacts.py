@@ -11,9 +11,10 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
+import struct
 import subprocess
 import uuid
+import zlib
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -167,8 +168,18 @@ def _fixtures(root: Path, bounded_fixture: Path) -> dict[str, Path]:
         ],
         cwd=root,
     )
-    bounded = root / "bounded-100mp.png"
-    shutil.copyfile(bounded_fixture, bounded)
+    bounded = root / "bounded-over-cap.png"
+    bounded_payload = bytearray(bounded_fixture.read_bytes())
+    if (
+        bounded_payload[:8] != b"\x89PNG\r\n\x1a\n"
+        or bounded_payload[12:16] != b"IHDR"
+        or struct.unpack(">I", bounded_payload[16:20])[0] != 10_000
+        or struct.unpack(">I", bounded_payload[20:24])[0] != 10_000
+    ):
+        raise RuntimeError("bounded fixture is not the pinned 100 MP PNG")
+    bounded_payload[16:20] = struct.pack(">I", 10_001)
+    bounded_payload[29:33] = struct.pack(">I", zlib.crc32(bounded_payload[12:29]))
+    bounded.write_bytes(bounded_payload)
     return {
         "image": image,
         "background": background,
@@ -517,39 +528,34 @@ def _bounded_decode(
     executable: Path,
     work: Path,
     bounded: Path,
-    requests: Path,
     outputs: Path,
 ) -> dict[str, object]:
-    request = make_request(
-        describe_image(bounded),
-        output_dir=outputs,
-        output_key="bounded-refusal",
-        output_kinds=["mask"],
-    )
-    request["job"]["limits"]["max_decoded_pixels"] = 1_000_000
-    request_path = requests / "bounded-decode-request.json"
-    request_path.write_bytes(canonical_bytes(request))
     completed = _run(
-        [str(executable), "run-contract", str(request_path), "--reference-profile"],
+        [
+            str(executable),
+            "image",
+            "--output-dir",
+            str(outputs),
+            "--reference-profile",
+            str(bounded),
+        ],
         cwd=work,
-        expected=frozenset({3}),
+        expected=frozenset({2}),
     )
     result = _document(completed)
-    destination = Path(str(request["destinations"]["mask"]))
     return {
         "schema": "kilix.background-removal.product-bounded-decode/v1",
         "fixture": {
             "bytes": bounded.stat().st_size,
-            "decoded_pixels": int(request["input"]["width"]) * int(request["input"]["height"]),
-            "expansion_ratio_rgba": (
-                int(request["input"]["width"]) * int(request["input"]["height"]) * 4
-            )
-            // bounded.stat().st_size,
+            "decoded_pixels": 10_001 * 10_000,
+            "expansion_ratio_rgba": (10_001 * 10_000 * 4) // bounded.stat().st_size,
         },
-        "configured_max_decoded_pixels": 1_000_000,
+        "configured_max_decoded_pixels": 100_000_000,
         "terminal": result,
         "typed_refusal": result["error"]["job"]["code"] == "background.input-limit",
-        "destination_present": destination.exists(),
+        "destination_present": any(
+            path.name.startswith("bounded-over-cap") for path in outputs.iterdir()
+        ),
         "bounded_child_policy": {
             "wall_seconds": 30.0,
             "cpu_seconds": 30,
@@ -663,7 +669,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     _json(
         output / "bounded-decode.json",
-        _bounded_decode(cli, work, fixtures["bounded"], requests, outputs),
+        _bounded_decode(cli, work, fixtures["bounded"], outputs),
     )
     video_records = _all_video_profiles(cli, work, fixtures, outputs)
     _jsonl(output / "video-outcomes.jsonl", video_records)
