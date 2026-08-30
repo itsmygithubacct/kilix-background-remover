@@ -1,0 +1,331 @@
+{
+  "atomic_existing_destination": {
+    "outputs_unchanged": true,
+    "second_terminal": {
+      "error": {
+        "job": {
+          "category": "output",
+          "code": "background.output-failed",
+          "diagnostic_reference": "diag-c6c6f84dbfde0c1d0853979517cfc191",
+          "occurred_at": "2026-08-30T00:34:09.488050Z",
+          "request_id": "2dceee73-613c-4aba-93e4-d42a5bf3fe44",
+          "retryable": true,
+          "schema": "kilix.media-job.error/v2",
+          "sequence": 7,
+          "state": "failed"
+        },
+        "phase": "write-output",
+        "schema": "kilix.background-removal.error/v2"
+      },
+      "progress": [
+        {
+          "job": {
+            "elapsed_ms": 11,
+            "estimated_remaining_ms": null,
+            "progress": 0.0,
+            "request_id": "2dceee73-613c-4aba-93e4-d42a5bf3fe44",
+            "schema": "kilix.media-job.progress/v2",
+            "sequence": 0,
+            "state": "queued",
+            "updated_at": "2026-08-30T00:34:08.625747Z"
+          },
+          "phase": "accepted",
+          "schema": "kilix.background-removal.progress/v2"
+        },
+        {
+          "job": {
+            "elapsed_ms": 15,
+            "estimated_remaining_ms": null,
+            "progress": 0.05,
+            "request_id": "2dceee73-613c-4aba-93e4-d42a5bf3fe44",
+            "schema": "kilix.media-job.progress/v2",
+            "sequence": 1,
+            "state": "loading",
+            "updated_at": "2026-08-30T00:34:08.630011Z"
+          },
+          "phase": "resolve-profile",
+          "schema": "kilix.background-removal.progress/v2"
+        },
+        {
+          "job": {
+            "elapsed_ms": 306,
+            "estimated_remaining_ms": null,
+            "progress": 0.15,
+            "request_id": "2dceee73-613c-4aba-93e4-d42a5bf3fe44",
+            "schema": "kilix.media-job.progress/v2",
+            "sequence": 2,
+            "state": "loading",
+            "updated_at": "2026-08-30T00:34:08.920763Z"
+          },
+          "phase": "load-model",
+          "schema": "kilix.background-removal.progress/v2"
+        },
+        {
+          "job": {
+            "elapsed_ms": 853,
+            "estimated_remaining_ms": null,
+            "progress": 0.3,
+            "request_id": "2dceee73-613c-4aba-93e4-d42a5bf3fe44",
+            "schema": "kilix.media-job.progress/v2",
+            "sequence": 3,
+            "state": "running",
+            "updated_at": "2026-08-30T00:34:09.468131Z"
+          },
+          "phase": "decode",
+          "schema": "kilix.background-removal.progress/v2"
+        },
+        {
+          "job": {
+            "elapsed_ms": 861,
+            "estimated_remaining_ms": null,
+            "progress": 0.4,
+            "request_id": "2dceee73-613c-4aba-93e4-d42a5bf3fe44",
+            "schema": "kilix.media-job.progress/v2",
+            "sequence": 4,
+            "state": "running",
+            "updated_at": "2026-08-30T00:34:09.475315Z"
+          },
+          "phase": "preprocess",
+          "schema": "kilix.background-removal.progress/v2"
+        },
+        {
+          "job": {
+            "elapsed_ms": 868,
+            "estimated_remaining_ms": null,
+            "progress": 0.6,
+            "request_id": "2dceee73-613c-4aba-93e4-d42a5bf3fe44",
+            "schema": "kilix.media-job.progress/v2",
+            "sequence": 5,
+            "state": "running",
+            "updated_at": "2026-08-30T00:34:09.482803Z"
+          },
+          "phase": "infer",
+          "schema": "kilix.background-removal.progress/v2"
+        },
+        {
+          "job": {
+            "elapsed_ms": 873,
+            "estimated_remaining_ms": null,
+            "progress": 0.72,
+            "request_id": "2dceee73-613c-4aba-93e4-d42a5bf3fe44",
+            "schema": "kilix.media-job.progress/v2",
+            "sequence": 6,
+            "state": "running",
+            "updated_at": "2026-08-30T00:34:09.487783Z"
+          },
+          "phase": "postprocess",
+          "schema": "kilix.background-removal.progress/v2"
+        }
+      ],
+      "result": null
+    },
+    "staging_files": {
+      "present": 0,
+      "total_allowed": 0
+    }
+  },
+  "bounded_decode_success": true,
+  "result": {
+    "error": null,
+    "progress": [
+      {
+        "job": {
+          "elapsed_ms": 5,
+          "estimated_remaining_ms": null,
+          "progress": 0.0,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 0,
+          "state": "queued",
+          "updated_at": "2026-08-30T00:34:05.574288Z"
+        },
+        "phase": "accepted",
+        "schema": "kilix.background-removal.progress/v2"
+      },
+      {
+        "job": {
+          "elapsed_ms": 12,
+          "estimated_remaining_ms": null,
+          "progress": 0.05,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 1,
+          "state": "loading",
+          "updated_at": "2026-08-30T00:34:05.581298Z"
+        },
+        "phase": "resolve-profile",
+        "schema": "kilix.background-removal.progress/v2"
+      },
+      {
+        "job": {
+          "elapsed_ms": 189,
+          "estimated_remaining_ms": null,
+          "progress": 0.15,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 2,
+          "state": "loading",
+          "updated_at": "2026-08-30T00:34:05.758632Z"
+        },
+        "phase": "load-model",
+        "schema": "kilix.background-removal.progress/v2"
+      },
+      {
+        "job": {
+          "elapsed_ms": 648,
+          "estimated_remaining_ms": null,
+          "progress": 0.3,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 3,
+          "state": "running",
+          "updated_at": "2026-08-30T00:34:06.216970Z"
+        },
+        "phase": "decode",
+        "schema": "kilix.background-removal.progress/v2"
+      },
+      {
+        "job": {
+          "elapsed_ms": 653,
+          "estimated_remaining_ms": null,
+          "progress": 0.4,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 4,
+          "state": "running",
+          "updated_at": "2026-08-30T00:34:06.221733Z"
+        },
+        "phase": "preprocess",
+        "schema": "kilix.background-removal.progress/v2"
+      },
+      {
+        "job": {
+          "elapsed_ms": 661,
+          "estimated_remaining_ms": null,
+          "progress": 0.6,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 5,
+          "state": "running",
+          "updated_at": "2026-08-30T00:34:06.229932Z"
+        },
+        "phase": "infer",
+        "schema": "kilix.background-removal.progress/v2"
+      },
+      {
+        "job": {
+          "elapsed_ms": 665,
+          "estimated_remaining_ms": null,
+          "progress": 0.72,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 6,
+          "state": "running",
+          "updated_at": "2026-08-30T00:34:06.234470Z"
+        },
+        "phase": "postprocess",
+        "schema": "kilix.background-removal.progress/v2"
+      },
+      {
+        "job": {
+          "elapsed_ms": 698,
+          "estimated_remaining_ms": null,
+          "progress": 0.82,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 7,
+          "state": "encoding",
+          "updated_at": "2026-08-30T00:34:06.267600Z"
+        },
+        "phase": "write-output",
+        "schema": "kilix.background-removal.progress/v2"
+      },
+      {
+        "job": {
+          "elapsed_ms": 713,
+          "estimated_remaining_ms": null,
+          "progress": 0.92,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 8,
+          "state": "encoding",
+          "updated_at": "2026-08-30T00:34:06.282622Z"
+        },
+        "phase": "verify-output",
+        "schema": "kilix.background-removal.progress/v2"
+      },
+      {
+        "job": {
+          "elapsed_ms": 723,
+          "estimated_remaining_ms": null,
+          "progress": 0.98,
+          "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+          "schema": "kilix.media-job.progress/v2",
+          "sequence": 9,
+          "state": "encoding",
+          "updated_at": "2026-08-30T00:34:06.291841Z"
+        },
+        "phase": "commit",
+        "schema": "kilix.background-removal.progress/v2"
+      }
+    ],
+    "result": {
+      "backend": "onnxruntime-cpu",
+      "job": {
+        "committed_at": "2026-08-30T00:34:06.299800Z",
+        "diagnostic_reference": "diag-484336821cf6582aad490f17029b7948",
+        "elapsed_ms": 731,
+        "request_id": "f648d440-6ef6-47ab-a773-e0fdf420869b",
+        "schema": "kilix.media-job.result/v2",
+        "sequence": 10,
+        "state": "committed",
+        "warnings": []
+      },
+      "mask": {
+        "bytes": 264,
+        "encoding": "gray8",
+        "height": 12,
+        "media_type": "image/png",
+        "path": "/home/pleb/gpu_terminal/kilix-apps/kilix-background-remover/evidence/0.2.1-product-return-r1/outputs/image-cli/subject-png-103ab4c01ac9f831.mask.png",
+        "pixel_contract": "kilix.foreground-alpha-gray8/v2",
+        "semantics": "foreground-alpha",
+        "sha256": "18b09875a804c4e1ce348ff730c8af9358450cfb3a1ce5294c8df24cbd0216c4",
+        "width": 16
+      },
+      "model": {
+        "artifact_sha256": "88793d8eb097ffe7f0c4203a89dd5f78cf5f0b6ab0b42b8bc4fbe495cb73b1b6",
+        "profile_id": "f108-reference-luma-v1"
+      },
+      "outputs": [
+        {
+          "bytes": 161,
+          "height": 12,
+          "kind": "cutout-png",
+          "media_type": "image/png",
+          "path": "/home/pleb/gpu_terminal/kilix-apps/kilix-background-remover/evidence/0.2.1-product-return-r1/outputs/image-cli/subject-png-103ab4c01ac9f831.cutout.png",
+          "sha256": "46b853e0be4715054589b1e4a1a99d7d27476dc8c9c244a1a1d298cdab9b6221",
+          "width": 16
+        }
+      ],
+      "request_schema": "kilix.background-removal.request/v2",
+      "schema": "kilix.background-removal.result/v2",
+      "settings": {
+        "background": {
+          "mode": "transparent"
+        },
+        "edge": {
+          "feather_radius_px": 0,
+          "matting_mode": "alpha",
+          "preserve_source_alpha": true,
+          "threshold_u8": 0
+        }
+      },
+      "source": {
+        "height": 12,
+        "sha256": "8e86265ce7a55ae1c47cf9c7dcf44c03012e9ce783e770af0326a227ba67d38a",
+        "width": 16
+      }
+    }
+  },
+  "schema": "kilix.background-removal.product-image-cli/v1"
+}

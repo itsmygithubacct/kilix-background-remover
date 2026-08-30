@@ -1,0 +1,50 @@
+{
+  "artifact_verified": true,
+  "network_listener": false,
+  "onnxruntime_available": true,
+  "provider": {
+    "candidate_manifest_sha256": "803a5661a708b366b1d26884a4cf52d45c71dac58926e8216eb69aa902cbd25c",
+    "decode": {
+      "address_space_bytes": 2147483648,
+      "child_to_parent_pickle": false,
+      "child_to_parent_pixels": "raw-rgba-mode-0600",
+      "cpu_seconds": 30,
+      "isolation": "spawned-resource-limited-process",
+      "max_decoded_pixels": 100000000,
+      "max_input_bytes": 536870912,
+      "max_output_bytes": 1073741824,
+      "max_status_bytes": 4096,
+      "wall_seconds": 30.0
+    },
+    "distribution": "kilix-background-remover",
+    "provider_api": 1,
+    "release_qualified": false,
+    "schema": "kilix.background-removal.provider-identity/v1",
+    "surfaces": [
+      "image",
+      "batch",
+      "video",
+      "editable-mask"
+    ],
+    "version": "0.2.1",
+    "video": {
+      "atomic_publication": "verified-no-replace",
+      "ffmpeg": "/usr/bin/ffmpeg",
+      "ffprobe": "/usr/bin/ffprobe",
+      "raw_frame_mode": true,
+      "temporal_smoothing": "centered-integer-mean-scene-isolated"
+    },
+    "video_output_kinds": [
+      "transparent-mov",
+      "transparent-webm",
+      "matte",
+      "composite-image",
+      "composite-video",
+      "gif"
+    ]
+  },
+  "reference_profile": "f108-reference-luma-v1",
+  "release_qualified": false,
+  "schema": "kilix.background-removal.doctor/v1",
+  "version": "0.2.1"
+}

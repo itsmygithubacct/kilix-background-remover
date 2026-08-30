@@ -1,0 +1,16 @@
+{
+  "background_image": null,
+  "background_video": null,
+  "batch_frames": 1,
+  "confirmation_sha256": "d5458e1d90cf6ecd133cd4a184bb94e2430d5ff9c6351f8c6c444f0d732245ec",
+  "destination": "/home/pleb/gpu_terminal/kilix-apps/kilix-background-remover/evidence/0.2.1-product-return-r1/outputs/tui-matte.media",
+  "gif_alpha_threshold_u8": 128,
+  "no_audio": false,
+  "output_kind": "matte",
+  "raw_frames": false,
+  "scene_cut_threshold_u8": 48,
+  "schema": "kilix.background-removal.video-request/v1",
+  "smoothing_radius_frames": 1,
+  "source": "/home/pleb/gpu_terminal/kilix-apps/kilix-background-remover/evidence/0.2.1-product-return-r1/fixtures/source.mkv",
+  "state_dir": null
+}

@@ -1,0 +1,11 @@
+{
+  "app_batch_frames": 3,
+  "app_sha256": "067a9febb02389a886ae9a45401b873d7b28dae46a9a1cf5dd1a5cbbf9c0426c",
+  "bit_identical": true,
+  "decoded_bytes": 576,
+  "raw_frame_mode": "available",
+  "scene_isolation": "production-scene-cut-segments",
+  "schema": "kilix.background-removal.product-temporal-smoothing/v1",
+  "tui_batch_frames": 1,
+  "tui_sha256": "067a9febb02389a886ae9a45401b873d7b28dae46a9a1cf5dd1a5cbbf9c0426c"
+}

@@ -1,0 +1,34 @@
+{
+  "bounded_child_policy": {
+    "address_space_bytes": 2147483648,
+    "cpu_seconds": 30,
+    "status_bytes": 4096,
+    "wall_seconds": 30.0
+  },
+  "configured_max_decoded_pixels": 100000000,
+  "destination_present": false,
+  "fixture": {
+    "bytes": 435592,
+    "decoded_pixels": 100010000,
+    "expansion_ratio_rgba": 918
+  },
+  "schema": "kilix.background-removal.product-bounded-decode/v1",
+  "terminal": {
+    "error": {
+      "job": {
+        "category": "input",
+        "code": "background.input-limit",
+        "diagnostic_reference": "diag-687ccf225a06765d29cb759f2aade3a7",
+        "occurred_at": "2026-08-30T00:34:10.708202Z",
+        "request_id": "00000000-0000-4000-8000-000000000000",
+        "retryable": false,
+        "schema": "kilix.media-job.error/v2",
+        "sequence": 0,
+        "state": "failed"
+      },
+      "phase": "decode",
+      "schema": "kilix.background-removal.error/v2"
+    }
+  },
+  "typed_refusal": true
+}

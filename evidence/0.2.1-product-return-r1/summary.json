@@ -1,0 +1,72 @@
+{
+  "acceptance": {
+    "passed": 0,
+    "total": 1
+  },
+  "artifact_files": {
+    "passed": 11,
+    "total": 11
+  },
+  "atomic_existing_output": {
+    "passed": 1,
+    "total": 1
+  },
+  "bounded_decode": {
+    "passed": 2,
+    "total": 2
+  },
+  "f115_external_gate_disposition": {
+    "passed": 0,
+    "total": 1
+  },
+  "f115_provider_capabilities": {
+    "passed": 5,
+    "total": 5
+  },
+  "g5b_freeze": {
+    "passed": 0,
+    "total": 1
+  },
+  "image": {
+    "passed": 1,
+    "total": 1
+  },
+  "od22_independent_adjudication": {
+    "passed": 5,
+    "total": 5
+  },
+  "product": {
+    "branch": "work/0.2.1-f108",
+    "commit": "d8c74998f8fd8b00ee7da34e3107fb42a21286ea",
+    "distribution": "kilix-background-remover",
+    "empty_current_directory": true,
+    "source_checkout_imported": false,
+    "tree": "6919b345534c8e81577066cc6adeb8dc67907cf2",
+    "version": "0.2.1",
+    "wheel_sha256": "43726d2ccb907ef34bc7d8a3f390aefc7e727f1a1ac94cbb62886d8359233627"
+  },
+  "provider_refusals_received": {
+    "passed": 0,
+    "total": 0
+  },
+  "schema": "kilix.background-removal.product-return/v1",
+  "surface_names": [
+    "provider",
+    "cli",
+    "tui",
+    "contained-app",
+    "f115-port"
+  ],
+  "surfaces": {
+    "passed": 5,
+    "total": 5
+  },
+  "temporal_batch_equality": {
+    "passed": 1,
+    "total": 1
+  },
+  "video_profiles": {
+    "passed": 6,
+    "total": 6
+  }
+}

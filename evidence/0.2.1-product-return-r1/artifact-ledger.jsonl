@@ -1,0 +1,11 @@
+{"bytes":3900,"mode":"0o600","path":"outputs/app-matte.media","sha256":"f03d881b61d84efd134a3f62288c820666cc9cd91c72662143697356f59af414"}
+{"bytes":4220,"mode":"0o600","path":"outputs/cli-composite-image.media","sha256":"29ebda3bccb798c10cf99430b2049896eabbdeb7469616b0ef8eedf594beed03"}
+{"bytes":4234,"mode":"0o600","path":"outputs/cli-composite-video.media","sha256":"67f44692c92078d702e05ee1d936e0c6d99fc8633ad010569ef42b394ac872d8"}
+{"bytes":1131,"mode":"0o600","path":"outputs/cli-gif.media","sha256":"a2f43729320ff8f782d8cb9f2c714561854db69b506260c997e4351e911e0ecc"}
+{"bytes":3900,"mode":"0o600","path":"outputs/cli-matte.media","sha256":"16d49404e79e223bb83e514a99a3eb4619df2df634f261421baecdce33292ca3"}
+{"bytes":15969,"mode":"0o600","path":"outputs/cli-transparent-mov.media","sha256":"e231db02a2bfba2038033a9b08ddbc59e6cf63cb710d3a81264e35ca9cb979ae"}
+{"bytes":6513,"mode":"0o600","path":"outputs/cli-transparent-webm.media","sha256":"bcc085dd4372ec0cb8886482c179e9b989ee5c44ec5ebeea5a1b47c7494dd318"}
+{"bytes":264,"mode":"0o600","path":"outputs/f115-pane4.mask.png","sha256":"18b09875a804c4e1ce348ff730c8af9358450cfb3a1ce5294c8df24cbd0216c4"}
+{"bytes":161,"mode":"0o600","path":"outputs/image-cli/subject-png-103ab4c01ac9f831.cutout.png","sha256":"46b853e0be4715054589b1e4a1a99d7d27476dc8c9c244a1a1d298cdab9b6221"}
+{"bytes":264,"mode":"0o600","path":"outputs/image-cli/subject-png-103ab4c01ac9f831.mask.png","sha256":"18b09875a804c4e1ce348ff730c8af9358450cfb3a1ce5294c8df24cbd0216c4"}
+{"bytes":3900,"mode":"0o600","path":"outputs/tui-matte.media","sha256":"0cdfb327088f033c1e4f99cd14d57767df3cfc9254ee78d07f8dba96a060676d"}

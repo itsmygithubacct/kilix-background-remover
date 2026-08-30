@@ -1,0 +1,94 @@
+{
+  "cancellation": {
+    "destination_present": false,
+    "outcome": {
+      "cancellation_id": "601ab5b7-6741-4edc-bdb9-f1fe17d9ea97",
+      "linearization_sequence": 3,
+      "observed_at": "2026-08-30T00:35:15.957997Z",
+      "outcome": "accepted",
+      "request_id": "bc40a23a-8b7b-403d-9fcc-294c25315d5f",
+      "schema": "kilix.media-job.cancel-outcome/v2",
+      "terminal_sequence": null,
+      "terminal_state": null
+    },
+    "terminal_schema": "kilix.background-removal.error/v2",
+    "terminal_state": "cancelled"
+  },
+  "capabilities": {
+    "passed": 5,
+    "total": 5
+  },
+  "editable_mask": {
+    "document_revision": 1,
+    "geometry": [
+      16,
+      12
+    ],
+    "imported": true,
+    "progress_messages": {
+      "passed": 10,
+      "total": 10
+    },
+    "sample_sha256": "2634182206ac61740110dd5d1d73e39130278fe75bc411a35dcd8a82c1f36be9",
+    "source_unchanged": true
+  },
+  "f115_gate_8_disposition": {
+    "passed": 0,
+    "total": 1
+  },
+  "identity": {
+    "concurrent_requests": 1,
+    "max_payload_bytes": 2097152,
+    "operations": [
+      "discover",
+      "submit",
+      "cancel",
+      "close"
+    ],
+    "provider": {
+      "candidate_manifest_sha256": "803a5661a708b366b1d26884a4cf52d45c71dac58926e8216eb69aa902cbd25c",
+      "decode": {
+        "address_space_bytes": 2147483648,
+        "child_to_parent_pickle": false,
+        "child_to_parent_pixels": "raw-rgba-mode-0600",
+        "cpu_seconds": 30,
+        "isolation": "spawned-resource-limited-process",
+        "max_decoded_pixels": 100000000,
+        "max_input_bytes": 536870912,
+        "max_output_bytes": 1073741824,
+        "max_status_bytes": 4096,
+        "wall_seconds": 30
+      },
+      "distribution": "kilix-background-remover",
+      "provider_api": 1,
+      "release_qualified": false,
+      "schema": "kilix.background-removal.provider-identity/v1",
+      "surfaces": [
+        "image",
+        "batch",
+        "video",
+        "editable-mask"
+      ],
+      "version": "0.2.1",
+      "video": {
+        "atomic_publication": "verified-no-replace",
+        "ffmpeg": "/usr/bin/ffmpeg",
+        "ffprobe": "/usr/bin/ffprobe",
+        "raw_frame_mode": true,
+        "temporal_smoothing": "centered-integer-mean-scene-isolated"
+      },
+      "video_output_kinds": [
+        "transparent-mov",
+        "transparent-webm",
+        "matte",
+        "composite-image",
+        "composite-video",
+        "gif"
+      ]
+    },
+    "schema": "kilix.background-removal.provider-port/v1",
+    "transport": "length-framed-stdio"
+  },
+  "provider_process_external": true,
+  "schema": "kilix.background-removal.product-f115-port/v1"
+}
