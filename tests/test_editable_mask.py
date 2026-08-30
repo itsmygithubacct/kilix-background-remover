@@ -8,7 +8,7 @@ import json
 import struct
 import threading
 import zlib
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -17,8 +17,13 @@ import pytest
 from kilix_f108_f115_contracts import contract_root
 from PIL import Image, PngImagePlugin
 
-from kilix_background_remover.contract_v2 import ContractRuntime, canonical_bytes
+from kilix_background_remover.contract_v2 import (
+    ContractRuntime,
+    canonical_bytes,
+    process_foreground_plane,
+)
 from kilix_background_remover.editable_mask import (
+    EditableLayerMask,
     EditableMaskDocument,
     EditableMaskImportPlan,
     consume_editable_mask_transcript,
@@ -401,3 +406,100 @@ def test_reference_consumer_uses_the_installed_complete_runtime() -> None:
 
     assert len(runtime.manifest_entries) == 46
     assert len(runtime.documents) == 12
+
+
+def _reference_import(
+    source_path: Path,
+    output_dir: Path,
+    provider: WorkerSupervisor,
+    edge: Mapping[str, object],
+) -> EditableLayerMask:
+    identity = describe_image(source_path)
+    document = EditableMaskDocument(
+        source_sha256=identity["sha256"],  # type: ignore[arg-type]
+        width=identity["width"],  # type: ignore[arg-type]
+        height=identity["height"],  # type: ignore[arg-type]
+    )
+    output_dir.mkdir(parents=True, exist_ok=False)
+    imported = run_reference_editable_mask_operation(
+        source_path,
+        document,
+        output_dir=output_dir,
+        provider=provider,
+        edge_settings=edge,
+    )
+    assert imported is not None
+    return imported
+
+
+def test_reference_harness_reported_threshold_and_feather_describe_the_imported_samples(
+    tmp_path: Path,
+) -> None:
+    """The reported edge settings are decidable against the samples, not decorative.
+
+    A report that cannot be falsified is a notice. This control recovers the
+    provider's own model plane through a neutral pane-4 operation, then requires
+    the samples imported under the reported settings to equal the independent
+    contract authority's recomputation from those *reported* settings. Mutations
+    EM-1 (production threshold ignored) and EM-2 (production feather ignored)
+    are killed 2/2 by the equality; the 2/2 null controls below prove the
+    equality is sensitive to each reported field rather than trivially true.
+    """
+
+    source_path = tmp_path / "reported-edge-layer.png"
+    width, height = 40, 24
+    pixels = bytes(
+        channel
+        for y in range(height)
+        for x in range(width)
+        for channel in (
+            (x * 11 + y) % 256,
+            (y * 13 + x * 3) % 256,
+            (x * 5 + y * 7) % 256,
+            (17 + x * 6 + y * 9) % 256,
+        )
+    )
+    Image.frombytes("RGBA", (width, height), pixels).save(source_path, format="PNG")
+    with Image.open(source_path) as opened:
+        source_alpha = list(opened.convert("RGBA").getchannel("A").tobytes())
+
+    neutral = {
+        "threshold_u8": 0,
+        "feather_radius_px": 0,
+        "matting_mode": "alpha",
+        "preserve_source_alpha": False,
+    }
+    reported = {
+        "threshold_u8": 31,
+        "feather_radius_px": 1,
+        "matting_mode": "alpha",
+        "preserve_source_alpha": True,
+    }
+
+    with WorkerSupervisor(cancellation_database=tmp_path / "reported-edge.sqlite3") as provider:
+        plane = _reference_import(source_path, tmp_path / "plane", provider, neutral)
+        imported = _reference_import(source_path, tmp_path / "reported", provider, reported)
+
+    model_plane = [sample / 255.0 for sample in plane.pixels]
+    assert imported.provenance.edge_settings == reported
+    assert imported.provenance.width == width
+    assert imported.provenance.height == height
+    assert len(imported.pixels) == width * height == len(model_plane)
+    assert len(set(plane.pixels)) > 1
+
+    def authority(edge: Mapping[str, object]) -> bytes:
+        return bytes(
+            process_foreground_plane(
+                {
+                    "width": width,
+                    "height": height,
+                    "model_plane": model_plane,
+                    "source_alpha": source_alpha,
+                    **dict(edge),
+                }
+            )
+        )
+
+    assert imported.pixels == authority(imported.provenance.edge_settings)
+    assert imported.pixels != authority({**reported, "threshold_u8": 0})
+    assert imported.pixels != authority({**reported, "feather_radius_px": 0})
