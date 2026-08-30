@@ -37,6 +37,7 @@ PROCESS_ENV = {
     "LC_ALL": "C",
     "TZ": "UTC",
     "AV_LOG_FORCE_NOCOLOR": "1",
+    "TMPDIR": os.environ.get("TMPDIR", "/home/pleb/scratch-workers"),
 }
 
 
