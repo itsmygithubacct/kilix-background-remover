@@ -25,6 +25,7 @@ from .decode import DEFAULT_DECODE_BUDGET, MAX_DECODE_STATUS_BYTES
 from .errors import RemovalFailure
 from .frontend import MAX_DECODED_PIXELS, MAX_INPUT_BYTES, MAX_OUTPUT_BYTES
 from .jobs import BatchEntry, BatchItemOutcome, BatchRunner
+from .rss import RSS_METRIC
 from .video import (
     DEFAULT_VIDEO_LIMITS,
     ReferenceFrameMasker,
@@ -135,6 +136,13 @@ def provider_identity() -> dict[str, object]:
             "release_tiling_phases": None,
             "release_seam_policy": None,
             "release_rss_threshold_bytes": None,
+            "release_qualified": False,
+        },
+        "rss_measurement": {
+            "available": True,
+            "metric": RSS_METRIC,
+            "release_scope": None,
+            "release_threshold_bytes": None,
             "release_qualified": False,
         },
         "video": {

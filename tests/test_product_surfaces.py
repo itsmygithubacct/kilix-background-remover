@@ -61,6 +61,13 @@ def test_provider_identity_exposes_the_actual_bounded_decode_and_video_policy() 
         "release_rss_threshold_bytes": None,
         "release_qualified": False,
     }
+    assert identity["rss_measurement"] == {
+        "available": True,
+        "metric": "sampled-aggregate-process-tree-vmrss-bytes",
+        "release_scope": None,
+        "release_threshold_bytes": None,
+        "release_qualified": False,
+    }
 
 
 def test_wheel_declares_all_five_product_executables() -> None:

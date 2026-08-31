@@ -112,6 +112,23 @@ deterministic row-major 2-D tiles of at most 1,048,576 pixels. The reported
 release tiling phases, seam policy and RSS threshold remain unset and the
 provider remains explicitly unqualified until the release owner selects them.
 
+Installed qualification code can measure an explicitly selected Linux process
+tree without selecting a release ceiling:
+
+```python
+import os
+
+from kilix_background_remover.rss import ProcessTreeRssMonitor
+
+with ProcessTreeRssMonitor(os.getpid()) as monitor:
+    outcome = provider.run(request)
+measurement = monitor.measurement
+```
+
+The measurement is sampled aggregate `VmRSS` for the named root and observed
+descendants. Provider identity leaves both the release measurement scope and
+threshold unset; the mechanism by itself supplies 0/1 D14 release verdicts.
+
 The TUI accepts either a canonical candidate-R5 image request or a fixed-field
 video request. It exposes q/Escape cancellation and r retry, and reports the
 decode/model/backend/resource policy before work starts:
