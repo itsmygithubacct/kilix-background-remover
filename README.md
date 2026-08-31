@@ -1,9 +1,10 @@
 # Kilix Background Remover
 
 Local-first image and offline-video cutout provider for Plebian OS / Kilix
-0.2.1. The repository
-is a clean-room Apache-2.0 implementation. It is local-only during development;
-qualification does not authorize a remote, tag, artifact, or publication.
+0.2.1. The repository is a clean-room Apache-2.0 implementation. Development
+is published on the `work/0.2.1-f108` ref. That work-ref publication transports
+the exact review subject; it is not stream acceptance and does not authorize a
+release branch, tag, public artifact, model, or weight publication.
 
 The current implementation line consumes the candidate-R5 F108/F115 mask-first
 `/v2` JSON contracts and freezes a deterministic, wholly synthetic image/mask
