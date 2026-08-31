@@ -52,6 +52,15 @@ def test_provider_identity_exposes_the_actual_bounded_decode_and_video_policy() 
         "child_to_parent_pixels": "raw-rgba-mode-0600",
         "child_to_parent_pickle": False,
     }
+    assert identity["inference"] == {
+        "tile_order": "deterministic-row-major-2d",
+        "max_working_tile_pixels": 1_048_576,
+        "current_overlap_pixels": 0,
+        "release_tiling_phases": None,
+        "release_seam_policy": None,
+        "release_rss_threshold_bytes": None,
+        "release_qualified": False,
+    }
 
 
 def test_wheel_declares_all_five_product_executables() -> None:

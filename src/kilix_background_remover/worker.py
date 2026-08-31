@@ -38,9 +38,10 @@ from .postprocess import (
     render_cutout,
     render_image_composite,
 )
+from .tiling import iter_inference_tiles
 
 FALLBACK_REQUEST_ID = "00000000-0000-4000-8000-000000000000"
-INFERENCE_STRIP_PIXELS = 1_048_576
+INFERENCE_TILE_PIXELS = 1_048_576
 ABORT_GRACE_SECONDS = 0.75
 ERROR_POLICY = {
     "background.artifact-invalid": ("provider", False, "failed"),
@@ -163,25 +164,27 @@ def _request_id(raw: object) -> str:
 def _run_onnx_mask(
     session: Any, image: Image.Image, cancel: Any
 ) -> tuple[Image.Image, list[dict[str, str]]]:
-    """Infer full-resolution output in bounded horizontal strips."""
+    """Infer full-resolution output in bounded, exact-cover core tiles."""
 
     try:
         import numpy as np
 
         width, height = image.size
-        strip_height = max(1, min(height, INFERENCE_STRIP_PIXELS // width))
-        payload = bytearray(width * height)
+        mask = Image.new("L", (width, height))
         low = float("inf")
         high = float("-inf")
-        for top in range(0, height, strip_height):
+        for tile in iter_inference_tiles(
+            width,
+            height,
+            max_pixels=INFERENCE_TILE_PIXELS,
+        ):
             _check_cancel(cancel, "infer")
-            bottom = min(height, top + strip_height)
-            strip = image.crop((0, top, width, bottom)).convert("RGB")
-            rgb = np.asarray(strip, dtype=np.float32) / np.float32(255.0)
+            source_tile = image.crop(tile.box).convert("RGB")
+            rgb = np.asarray(source_tile, dtype=np.float32) / np.float32(255.0)
             tensor = np.transpose(rgb, (2, 0, 1))[None, ...]
             raw_output = session.run(["mask"], {"image": tensor})[0]
             output = np.asarray(raw_output, dtype=np.float32)
-            expected = width * (bottom - top)
+            expected = tile.pixels
             if output.size != expected:
                 raise RemovalFailure(
                     "background.inference-failed",
@@ -202,8 +205,12 @@ def _run_onnx_mask(
             encoded = np.floor(
                 np.clip(flat, 0.0, 1.0) * np.float32(255.0) + np.float32(0.5)
             ).astype(np.uint8)
-            start = top * width
-            payload[start : start + expected] = encoded.tobytes()
+            encoded_tile = Image.frombytes(
+                "L",
+                (tile.width, tile.height),
+                encoded.tobytes(),
+            )
+            mask.paste(encoded_tile, tile.box)
         if high == low:
             if high <= 0.0:
                 return Image.new("L", (width, height), 0), []
@@ -213,7 +220,7 @@ def _run_onnx_mask(
                 "provider",
                 "infer",
             )
-        return Image.frombytes("L", (width, height), bytes(payload)), []
+        return mask, []
     except RemovalFailure:
         raise
     except Exception as exc:

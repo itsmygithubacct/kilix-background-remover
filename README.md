@@ -106,7 +106,11 @@ kilix-background-remover-provider        length-framed F115 provider port
 All 5/5 enter the same provider façade. The per-frame video adapter is lent the
 provider's existing supervised worker; it does not create a second inference
 path. `kilix-background-remover doctor --json` reports the installed decode
-budgets, the 6/6 video kinds and the exact candidate manifest identity.
+budgets, the 6/6 video kinds and the exact candidate manifest identity. Its
+inference working-set control covers each source pixel exactly once in
+deterministic row-major 2-D tiles of at most 1,048,576 pixels. The reported
+release tiling phases, seam policy and RSS threshold remain unset and the
+provider remains explicitly unqualified until the release owner selects them.
 
 The TUI accepts either a canonical candidate-R5 image request or a fixed-field
 video request. It exposes q/Escape cancellation and r retry, and reports the

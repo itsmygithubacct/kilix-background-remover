@@ -37,7 +37,13 @@ from .video import (
     estimate_video,
     run_video,
 )
-from .worker import FALLBACK_REQUEST_ID, JobOutcome, WorkerSupervisor, failure_wire
+from .worker import (
+    FALLBACK_REQUEST_ID,
+    INFERENCE_TILE_PIXELS,
+    JobOutcome,
+    WorkerSupervisor,
+    failure_wire,
+)
 
 VideoProgress = Callable[[str, int, int], None]
 MAX_SURFACE_JSON_BYTES = 2 * 1024 * 1024
@@ -121,6 +127,15 @@ def provider_identity() -> dict[str, object]:
             "max_output_bytes": MAX_OUTPUT_BYTES,
             "child_to_parent_pixels": "raw-rgba-mode-0600",
             "child_to_parent_pickle": False,
+        },
+        "inference": {
+            "tile_order": "deterministic-row-major-2d",
+            "max_working_tile_pixels": INFERENCE_TILE_PIXELS,
+            "current_overlap_pixels": 0,
+            "release_tiling_phases": None,
+            "release_seam_policy": None,
+            "release_rss_threshold_bytes": None,
+            "release_qualified": False,
         },
         "video": {
             "ffmpeg": "/usr/bin/ffmpeg",
