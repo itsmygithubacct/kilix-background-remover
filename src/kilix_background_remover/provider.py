@@ -141,6 +141,9 @@ def provider_identity() -> dict[str, object]:
         "rss_measurement": {
             "available": True,
             "metric": RSS_METRIC,
+            "process_identity": "linux-proc-stat-starttime-ticks",
+            "root_pid_reuse": "refuse",
+            "descendant_pid_reuse_or_reparent": "omit",
             "release_scope": None,
             "release_threshold_bytes": None,
             "release_qualified": False,

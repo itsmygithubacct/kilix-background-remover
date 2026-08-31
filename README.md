@@ -126,8 +126,11 @@ measurement = monitor.measurement
 ```
 
 The measurement is sampled aggregate `VmRSS` for the named root and observed
-descendants. Provider identity leaves both the release measurement scope and
-threshold unset; the mechanism by itself supplies 0/1 D14 release verdicts.
+descendants. Every sampled PID is rebound to its Linux proc-stat start time
+before and after the RSS read: root PID reuse is refused, and reused or
+reparented descendants are omitted. Provider identity leaves both the release
+measurement scope and threshold unset; the mechanism by itself supplies 0/1
+D14 release verdicts.
 
 The TUI accepts either a canonical candidate-R5 image request or a fixed-field
 video request. It exposes q/Escape cancellation and r retry, and reports the

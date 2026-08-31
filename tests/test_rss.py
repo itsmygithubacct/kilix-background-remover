@@ -22,11 +22,27 @@ from kilix_background_remover.rss import (
 from kilix_background_remover.worker import WorkerSupervisor
 
 
-def _process(proc_root: Path, pid: int, parent: int, rss_kib: int) -> None:
+def _stat_payload(pid: int, parent: int, start_time_ticks: int) -> str:
+    fields = ["S", str(parent), *(["0"] * 17), str(start_time_ticks)]
+    return f"{pid} (name with ) parenthesis) {' '.join(fields)}\n"
+
+
+def _process(
+    proc_root: Path,
+    pid: int,
+    parent: int,
+    rss_kib: int,
+    *,
+    start_time_ticks: int | None = None,
+) -> None:
     root = proc_root / str(pid)
     root.mkdir()
     (root / "stat").write_text(
-        f"{pid} (name with ) parenthesis) S {parent} 0 0 0\n",
+        _stat_payload(
+            pid,
+            parent,
+            pid * 10 if start_time_ticks is None else start_time_ticks,
+        ),
         encoding="ascii",
     )
     (root / "status").write_text(
@@ -99,6 +115,59 @@ def test_r1_live_descendant_without_an_mm_contributes_zero_rss(tmp_path: Path) -
 
     assert snapshot.process_count == 2
     assert snapshot.pids == (275, 276)
+    assert snapshot.aggregate_rss_bytes == 100 * 1024
+
+
+def test_r1_reused_root_pid_is_refused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _process(tmp_path, 280, 1, 100, start_time_ticks=1_000)
+    original = Path.read_text
+    root_stat_reads = 0
+
+    def replace_root(path: Path, *args: object, **kwargs: object) -> str:
+        nonlocal root_stat_reads
+        if path == tmp_path / "280" / "stat":
+            root_stat_reads += 1
+            if root_stat_reads >= 2:
+                return _stat_payload(280, 1, 2_000)
+        return original(path, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", replace_root)
+
+    with pytest.raises(ProcessLookupError, match="root PID 280"):
+        sample_process_tree_rss(280, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("replacement_parent", "replacement_start"),
+    [(290, 4_000), (1, 3_000)],
+)
+def test_r1_reused_or_reparented_child_is_omitted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    replacement_parent: int,
+    replacement_start: int,
+) -> None:
+    _process(tmp_path, 290, 1, 100, start_time_ticks=2_000)
+    _process(tmp_path, 291, 290, 200, start_time_ticks=3_000)
+    original = Path.read_text
+    child_stat_reads = 0
+
+    def replace_child(path: Path, *args: object, **kwargs: object) -> str:
+        nonlocal child_stat_reads
+        if path == tmp_path / "291" / "stat":
+            child_stat_reads += 1
+            if child_stat_reads >= 2:
+                return _stat_payload(291, replacement_parent, replacement_start)
+        return original(path, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", replace_child)
+    snapshot = sample_process_tree_rss(290, tmp_path)
+
+    assert snapshot.process_count == 1
+    assert snapshot.pids == (290,)
     assert snapshot.aggregate_rss_bytes == 100 * 1024
 
 

@@ -64,6 +64,9 @@ def test_provider_identity_exposes_the_actual_bounded_decode_and_video_policy() 
     assert identity["rss_measurement"] == {
         "available": True,
         "metric": "sampled-aggregate-process-tree-vmrss-bytes",
+        "process_identity": "linux-proc-stat-starttime-ticks",
+        "root_pid_reuse": "refuse",
+        "descendant_pid_reuse_or_reparent": "omit",
         "release_scope": None,
         "release_threshold_bytes": None,
         "release_qualified": False,

@@ -16,6 +16,17 @@ class _ProcessNotResident(RuntimeError):
     """The proc entry exists but the process is already dead or a zombie."""
 
 
+class _ProcessChanged(RuntimeError):
+    """The numeric PID no longer names the process observed during discovery."""
+
+
+@dataclass(frozen=True, slots=True)
+class _ProcessIdentity:
+    pid: int
+    parent_pid: int
+    start_time_ticks: int
+
+
 @dataclass(frozen=True, slots=True)
 class RssSnapshot:
     """One aggregate resident-memory sample for a process tree."""
@@ -39,18 +50,45 @@ class PeakRssMeasurement:
     interval_seconds: float
 
 
-def _parent_pid(stat_path: Path) -> int:
+def _process_identity(stat_path: Path, expected_pid: int) -> _ProcessIdentity:
     payload = stat_path.read_text(encoding="ascii")
+    opening = payload.find("(")
     closing = payload.rfind(")")
-    if closing < 0:
+    if opening < 0 or closing <= opening:
         raise RuntimeError(f"malformed proc stat: {stat_path}")
+    try:
+        pid = int(payload[:opening].strip())
+    except ValueError as exc:
+        raise RuntimeError(f"invalid PID in proc stat: {stat_path}") from exc
+    if pid != expected_pid:
+        raise RuntimeError(f"mismatched PID in proc stat: {stat_path}")
     fields = payload[closing + 1 :].split()
-    if len(fields) < 2:
+    if len(fields) < 20:
         raise RuntimeError(f"truncated proc stat: {stat_path}")
     try:
-        return int(fields[1])
+        parent_pid = int(fields[1])
+        start_time_ticks = int(fields[19])
     except ValueError as exc:
-        raise RuntimeError(f"invalid parent PID in proc stat: {stat_path}") from exc
+        raise RuntimeError(f"invalid identity in proc stat: {stat_path}") from exc
+    if parent_pid < 0 or start_time_ticks < 0:
+        raise RuntimeError(f"negative identity in proc stat: {stat_path}")
+    return _ProcessIdentity(
+        pid=pid,
+        parent_pid=parent_pid,
+        start_time_ticks=start_time_ticks,
+    )
+
+
+def _require_same_process(
+    observed: _ProcessIdentity,
+    current: _ProcessIdentity,
+    *,
+    root: bool,
+) -> None:
+    if current.start_time_ticks != observed.start_time_ticks:
+        raise _ProcessChanged(f"PID {observed.pid} was reused")
+    if not root and current.parent_pid != observed.parent_pid:
+        raise _ProcessChanged(f"PID {observed.pid} was reparented")
 
 
 def _rss_bytes(status_path: Path) -> int:
@@ -93,28 +131,29 @@ def sample_process_tree_rss(
 ) -> RssSnapshot:
     """Sample aggregate RSS for one root and every observed descendant.
 
-    Processes that exit between the stat and status reads are omitted from the
-    current sample. Malformed or unreadable live entries fail closed rather
-    than silently producing a partial measurement.
+    Processes that exit, are reparented, or have their numeric PID reused
+    between discovery and the status read are omitted from the current sample.
+    A changed root identity is refused. Malformed or unreadable live entries
+    fail closed rather than silently producing a partial measurement.
     """
 
     if isinstance(root_pid, bool) or not isinstance(root_pid, int) or root_pid <= 0:
         raise ValueError("root_pid must be a positive integer")
 
     children: dict[int, list[int]] = defaultdict(list)
-    observed: set[int] = set()
+    identities: dict[int, _ProcessIdentity] = {}
     for entry in proc_root.iterdir():
         if not entry.name.isascii() or not entry.name.isdecimal():
             continue
         pid = int(entry.name)
         try:
-            parent = _parent_pid(entry / "stat")
+            identity = _process_identity(entry / "stat", pid)
         except FileNotFoundError:
             continue
-        observed.add(pid)
-        children[parent].append(pid)
+        identities[pid] = identity
+        children[identity.parent_pid].append(pid)
 
-    if root_pid not in observed:
+    if root_pid not in identities:
         raise ProcessLookupError(f"root PID {root_pid} is absent from {proc_root}")
 
     descendants: set[int] = set()
@@ -128,13 +167,22 @@ def sample_process_tree_rss(
 
     resident: dict[int, int] = {}
     for pid in sorted(descendants):
+        observed = identities[pid]
+        stat_path = proc_root / str(pid) / "stat"
+        status_path = proc_root / str(pid) / "status"
         try:
-            resident[pid] = _rss_bytes(proc_root / str(pid) / "status")
-        except (FileNotFoundError, _ProcessNotResident):
+            before = _process_identity(stat_path, pid)
+            _require_same_process(observed, before, root=pid == root_pid)
+            rss_bytes = _rss_bytes(status_path)
+            after = _process_identity(stat_path, pid)
+            _require_same_process(observed, after, root=pid == root_pid)
+        except (FileNotFoundError, _ProcessNotResident, _ProcessChanged):
             if pid == root_pid:
                 raise ProcessLookupError(
                     f"root PID {root_pid} exited during the RSS sample"
                 ) from None
+            continue
+        resident[pid] = rss_bytes
     pids = tuple(resident)
     return RssSnapshot(
         root_pid=root_pid,
