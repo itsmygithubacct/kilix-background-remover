@@ -19,6 +19,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any, cast
 
+from .capacity import capacity_identity
 from .contract_v2 import load_candidate_lock
 from .contracts import parse_request
 from .decode import DEFAULT_DECODE_BUDGET, MAX_DECODE_STATUS_BYTES
@@ -148,6 +149,7 @@ def provider_identity() -> dict[str, object]:
             "release_threshold_bytes": None,
             "release_qualified": False,
         },
+        "capacity_measurement": capacity_identity(),
         "video": {
             "ffmpeg": "/usr/bin/ffmpeg",
             "ffprobe": "/usr/bin/ffprobe",

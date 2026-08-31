@@ -71,6 +71,14 @@ def test_provider_identity_exposes_the_actual_bounded_decode_and_video_policy() 
         "release_threshold_bytes": None,
         "release_qualified": False,
     }
+    capacity = identity["capacity_measurement"]
+    assert capacity["frozen_tiers"] == {"observed": 3, "required": 3}
+    assert capacity["loadavg_samples_per_window"] == {"observed": 2, "required": 2}
+    assert capacity["h2_quiesced"] is False
+    assert capacity["release_profile"] is None
+    assert capacity["release_corpus"] is None
+    assert capacity["release_quality_floor"] is None
+    assert capacity["release_qualified"] is False
 
 
 def test_wheel_declares_all_five_product_executables() -> None:

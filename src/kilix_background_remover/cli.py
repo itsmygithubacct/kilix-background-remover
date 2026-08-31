@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
 from collections.abc import Sequence
+from contextlib import suppress
 from importlib.metadata import version
 from pathlib import Path
 from typing import cast
 
+from .capacity import CapacityMeasurementWindow, CapacityTier
+from .contract_v2 import canonical_bytes
 from .contracts import parse_request, sha256_file
 from .errors import RemovalFailure
 from .frontend import describe_image, load_json_document, make_request, stable_output_key
@@ -34,6 +38,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     contract.add_argument("request", type=Path)
     contract.add_argument("--reference-profile", action="store_true")
+
+    measure = subcommands.add_parser(
+        "measure-contract",
+        help="measure one cold request on an attested frozen capacity fixture",
+    )
+    measure.add_argument("request", type=Path)
+    measure.add_argument(
+        "--fixture-tier",
+        choices=[tier.value for tier in CapacityTier],
+        required=True,
+    )
+    measure.add_argument("--reference-profile", action="store_true")
 
     image = subcommands.add_parser("image", help="remove one image background")
     _add_image_options(image)
@@ -104,6 +120,52 @@ def _outcome_wire(outcome: JobOutcome) -> dict[str, object]:
         "result": outcome.result,
         "error": outcome.error,
     }
+
+
+def _measure_contract_command(args: argparse.Namespace) -> int:
+    raw = load_json_document(args.request)
+    parsed = parse_request(raw)
+    storage_paths = tuple(
+        sorted({destination.parent for destination in parsed.destinations.values()})
+    )
+    request_bytes = canonical_bytes(raw)
+    outcome: JobOutcome | None = None
+    # The window remains publishable without exposing exception prose.  Its H2
+    # load pair is mandatory even when the workload itself fails.
+    with CapacityMeasurementWindow(
+        CapacityTier(args.fixture_tier), storage_paths=storage_paths
+    ) as window, suppress(Exception):
+        outcome = _run(raw, args.reference_profile)
+    if outcome is None:
+        terminal = None
+        outcome_kind = "internal-error"
+    else:
+        terminal = outcome.result if outcome.result is not None else outcome.error
+        outcome_kind = "result" if outcome.ok else "error"
+    report = {
+        "schema": "kilix.background-removal.capacity-measurement/v1",
+        "window": window.measurement.wire(),
+        "workload": {
+            "kind": "cold-single-image-contract",
+            "measured_images": {"observed": 1, "required": 1},
+            "request_sha256": hashlib.sha256(request_bytes).hexdigest(),
+            "request_bytes": len(request_bytes),
+            "profile_id": parsed.model.profile_id,
+            "profile_artifact_sha256": parsed.model.artifact_sha256,
+            "reference_profile_authorized": bool(args.reference_profile),
+            "release_profile_qualified": False,
+        },
+        "outcome": {
+            "completed": {"observed": int(outcome is not None), "required": 1},
+            "kind": outcome_kind,
+            "terminal_schema": None if terminal is None else terminal.get("schema"),
+        },
+        "quality_metrics": {"observed": 0, "required": 4},
+        "release_acceptance_credit": {"observed": 0, "required": 1},
+        "release_qualified": False,
+    }
+    print(_json(report), end="")
+    return 0 if outcome is not None and outcome.ok else 3
 
 
 def _output_policy(args: argparse.Namespace) -> tuple[list[str], dict[str, object]]:
@@ -288,6 +350,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             outcome = _run(raw, args.reference_profile)
             print(_json(_outcome_wire(outcome)), end="")
             return 0 if outcome.ok else 3
+        if args.command == "measure-contract":
+            return _measure_contract_command(args)
         if args.command == "image":
             return _image_command(args)
         if args.command == "batch":

@@ -132,6 +132,23 @@ reparented descendants are omitted. Provider identity leaves both the release
 measurement scope and threshold unset; the mechanism by itself supplies 0/1
 D14 release verdicts.
 
+The F100-C0 H0/H1/H2 fixture contract is also pinned into provider identity as
+3/3 frozen tiers. `measure-contract` first attests every property observable
+inside the declared fixture and refuses a mismatched runtime before starting a
+window. Every completed window publishes the complete `/proc/loadavg` line at
+both boundaries (2/2), including the mandatory H2 pair, plus elapsed monotonic
+time and peak process-tree RSS:
+
+```sh
+kilix-background-remover measure-contract request.json \
+  --fixture-tier h2 --reference-profile > measurement.json
+```
+
+That command always reports the bundled feasibility profile as unqualified and
+awards 0/1 release-acceptance credit. It does not substitute its 0/4 quality
+metrics for the missing licensed corpus, real profile, frozen quality floor, or
+release-owner qualification decisions.
+
 The TUI accepts either a canonical candidate-R5 image request or a fixed-field
 video request. It exposes q/Escape cancellation and r retry, and reports the
 decode/model/backend/resource policy before work starts:
