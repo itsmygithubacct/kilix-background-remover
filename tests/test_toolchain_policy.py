@@ -3,6 +3,11 @@
 Mutation U-1 restores the stale 0.12.3 metadata pin; mutation U-2 removes the
 toolchain prerequisite from ``make check``. Their isolated roots are asserted
 before scoring, and both 2/2 mutations are killed by the controls below.
+
+Mutation E-1 drops ``--all-extras`` from ``make setup``; mutation E-2 removes
+``env-check`` from ``make check``. Either one restores the gap where a synced
+environment silently lacked the ``spike`` extra and 30/200 tests failed on
+assertions rather than on one legible message. Both 2/2 are killed below.
 """
 
 from __future__ import annotations
@@ -37,3 +42,37 @@ def test_primary_make_targets_enforce_the_toolchain_gate() -> None:
     assert re.search(r"^check: toolchain-check$", makefile, flags=re.MULTILINE)
     assert 'make setup UV="$UV"' in readme
     assert 'make check UV="$UV"' in readme
+
+
+def test_setup_installs_every_extra_the_suite_requires() -> None:
+    """``make setup`` must install what ``make check`` then assumes.
+
+    A plain ``--all-groups`` sync does not install the ``spike`` extra, and
+    ``onnxruntime`` is imported by the worker under 30 of the suite's cases.
+    Kills mutation E-1.
+    """
+
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert re.search(
+        r"^setup: toolchain-check\n\t\$\(UV\) sync --locked --all-groups --all-extras$",
+        makefile,
+        flags=re.MULTILINE,
+    )
+
+
+def test_check_gates_the_environment_before_running_the_suite() -> None:
+    """A missing extra must fail as one message, not as 30 assertions.
+
+    Kills mutation E-2.
+    """
+
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert re.search(r"^env-check:$", makefile, flags=re.MULTILINE)
+    assert re.search(r"^\t\$\(MAKE\) env-check$", makefile, flags=re.MULTILINE)
+    assert "environment refusal: onnxruntime is absent" in makefile
+    assert "environment refusal: the contract carrier is absent" in makefile
+
+    check = makefile.split("check: toolchain-check", 1)[1].split("\nclean:", 1)[0]
+    assert check.index("env-check") < check.index("corpus-check test")

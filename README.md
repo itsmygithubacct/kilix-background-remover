@@ -41,6 +41,17 @@ make setup UV="$UV"
 make check UV="$UV"
 ```
 
+`make setup` syncs `--all-groups --all-extras`. Both halves are required: the
+suite imports `onnxruntime` from the `spike` extra, so a `--all-groups`-only
+sync leaves 30 cases failing on assertions rather than on a missing dependency.
+`make check` runs `env-check` first, which refuses with one message naming what
+is absent instead of letting the suite fail obscurely.
+
+The `contracts` extra carries `kilix-f108-f115-contracts`, which is **published
+to no index** and is supplied locally through `[tool.uv.sources]`. The product
+installs and runs without it; contract operations then refuse with
+`C-CARRIER-INSTALLED` rather than failing to import.
+
 Regenerate and verify the owned corpus:
 
 ```sh

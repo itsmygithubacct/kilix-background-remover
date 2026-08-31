@@ -4,7 +4,7 @@ UV_RELEASE_SHA256 := b65f23a420c4acc96427efb30e5ed9bc0f7e25d2d712000f6ede77c1a0d
 
 .DEFAULT_GOAL := help
 
-.PHONY: help toolchain-check setup lock-check corpus-check test lint format-check typecheck build check clean
+.PHONY: help toolchain-check setup env-check lock-check corpus-check test lint format-check typecheck build check clean
 
 help:
 	@printf '%s\n' \
@@ -12,6 +12,7 @@ help:
 		'' \
 		'  make toolchain-check Verify the release-pinned uv executable' \
 		'  make setup         Sync the exact locked development environment' \
+		'  make env-check     Verify the environment has what the suite needs' \
 		'  make corpus-check  Verify the deterministic owned corpus' \
 		'  make check         Run lock, corpus, test, lint, format and type gates'
 
@@ -36,7 +37,23 @@ toolchain-check:
 	printf 'release uv: PASS version=%s sha256=%s\n' "$$actual_version" "$$actual_sha256"
 
 setup: toolchain-check
-	$(UV) sync --locked --all-groups
+	$(UV) sync --locked --all-groups --all-extras
+
+env-check:
+	@$(UV) run --frozen python -c "import onnxruntime" >/dev/null 2>&1 || { \
+		printf '%s\n' \
+			'environment refusal: onnxruntime is absent' \
+			'the suite requires the "spike" extra; a plain --all-groups sync does not install it' \
+			'run: make setup UV="$(UV)"' >&2; \
+		exit 1; \
+	}
+	@$(UV) run --frozen python -c "import kilix_f108_f115_contracts" >/dev/null 2>&1 || { \
+		printf '%s\n' \
+			'environment refusal: the contract carrier is absent' \
+			'run: make setup UV="$(UV)"' >&2; \
+		exit 1; \
+	}
+	@printf 'environment: PASS onnxruntime 1/1, contract carrier 1/1\n'
 
 lock-check:
 	$(UV) lock --check
@@ -61,6 +78,7 @@ build:
 
 check: toolchain-check
 	$(MAKE) lock-check
+	$(MAKE) env-check
 	$(MAKE) corpus-check test lint format-check typecheck build
 
 clean:
