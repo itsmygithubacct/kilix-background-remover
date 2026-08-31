@@ -132,9 +132,12 @@ def _measure_contract_command(args: argparse.Namespace) -> int:
     outcome: JobOutcome | None = None
     # The window remains publishable without exposing exception prose.  Its H2
     # load pair is mandatory even when the workload itself fails.
-    with CapacityMeasurementWindow(
-        CapacityTier(args.fixture_tier), storage_paths=storage_paths
-    ) as window, suppress(Exception):
+    with (
+        CapacityMeasurementWindow(
+            CapacityTier(args.fixture_tier), storage_paths=storage_paths
+        ) as window,
+        suppress(Exception),
+    ):
         outcome = _run(raw, args.reference_profile)
     if outcome is None:
         terminal = None
