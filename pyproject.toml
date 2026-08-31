@@ -12,17 +12,19 @@ license = {file = "LICENSE"}
 authors = [{name = "itsmygithubacct", email = "itsmygithubacct@users.noreply.github.com"}]
 dependencies = [
   "jsonschema[format]==4.25.1",
-  "kilix-f108-f115-contracts==0.2.1.dev5",
   "Pillow==11.1.0",
   "rfc8785==0.1.4",
 ]
 
 [project.optional-dependencies]
+# Not published to any index; supplied locally through [tool.uv.sources].
+contracts = ["kilix-f108-f115-contracts==0.2.1.dev5"]
 spike = ["onnx==1.20.1", "onnxruntime==1.29.0"]
 
 [dependency-groups]
 dev = [
   "hatchling==1.27.0",
+  "kilix-f108-f115-contracts==0.2.1.dev5",
   "jsonschema==4.25.1",
   "mypy==1.17.1",
   "pytest==8.4.1",

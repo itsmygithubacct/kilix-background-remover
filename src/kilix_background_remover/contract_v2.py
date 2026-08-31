@@ -19,13 +19,12 @@ from collections.abc import Iterator, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from importlib import resources
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
 import rfc8785
 from jsonschema import Draft202012Validator, FormatChecker
-from kilix_f108_f115_contracts import contract_root
 from referencing import Registry, Resource
 
 MAX_DOCUMENT_BYTES = 2_097_152
@@ -90,7 +89,18 @@ class ContractRuntime:
     @classmethod
     def load(cls) -> ContractRuntime:
         lock = load_candidate_lock()
-        if version(lock.distribution) != lock.version:
+        # The candidate carrier is an optional distribution: it is not published to
+        # any index, so the product must import and run without it and refuse in a
+        # typed way when a contract operation actually needs it.
+        try:
+            from kilix_f108_f115_contracts import contract_root
+        except ModuleNotFoundError:
+            _refuse("carrier", "C-CARRIER-INSTALLED")
+        try:
+            installed_version = version(lock.distribution)
+        except PackageNotFoundError:
+            _refuse("carrier", "C-CARRIER-INSTALLED")
+        if installed_version != lock.version:
             _refuse("carrier", "C-CARRIER-VERSION")
         root = Path(str(contract_root()))
         if not root.is_dir() or root.is_symlink():

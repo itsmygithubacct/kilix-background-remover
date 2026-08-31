@@ -11,8 +11,6 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, cast
 
-import kilix_f108_f115_contracts
-
 from .contract_v2 import (
     WIRE_TO_SCHEMA,
     ContractRefusal,
@@ -109,6 +107,8 @@ def installed_carrier_result(candidate_source: Path) -> dict[str, object]:
     product_install_root = Path(str(product_distribution.locate_file(""))).resolve()
     carrier_install_root = Path(str(carrier_distribution.locate_file(""))).resolve()
     product_module = Path(__file__).resolve()
+    import kilix_f108_f115_contracts
+
     carrier_module_value = kilix_f108_f115_contracts.__file__
     if carrier_module_value is None:
         raise RuntimeError("installed carrier has no module origin")
