@@ -43,7 +43,7 @@ kilix-background-remover-provider = "kilix_background_remover.provider_port:main
 required-version = "==0.12.5"
 
 [tool.uv.sources]
-kilix-f108-f115-contracts = { path = "../../../research/gpu_terminal/f108-f115-g5b-r5/evidence/package-builds/build-1/kilix_f108_f115_contracts-0.2.1.dev5-py3-none-any.whl" }
+kilix-f108-f115-contracts = { path = "vendor/kilix_f108_f115_contracts-0.2.1.dev5-py3-none-any.whl" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kilix_background_remover"]
