@@ -13,6 +13,7 @@ import json
 import os
 import struct
 import subprocess
+import tempfile
 import uuid
 import zlib
 from collections.abc import Mapping, Sequence
@@ -38,7 +39,9 @@ PROCESS_ENV = {
     "LC_ALL": "C",
     "TZ": "UTC",
     "AV_LOG_FORCE_NOCOLOR": "1",
-    "TMPDIR": os.environ.get("TMPDIR", "/home/pleb/scratch-workers"),
+    # tempfile.gettempdir() reads TMPDIR first and falls back to the
+    # platform default, so the generator carries no host assumption.
+    "TMPDIR": tempfile.gettempdir(),
 }
 
 
