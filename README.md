@@ -1,5 +1,20 @@
 # Kilix Background Remover
 
+A local-first image and offline-video cutout provider for Kilix, with five
+command, terminal and app surfaces over one supervised worker.
+
+**Status:** candidate, not part of Plebian-OS. This README describes the
+repository's default branch, `work/0.2.1-f108`. The Plebian-OS 0.2.2 release
+notes list it (F108, `ce99d1af`) among stream deliverables that do not ship in
+the image. The Kilix for Windows preview's WSL app catalog
+(`windows/wsl/app-catalog.json` in kilix) lists it as "Background Remover",
+pinned to `ce99d1af` (this branch's head), for bounded image inspection only:
+no production cutout model is selected, so inference is unavailable there. The
+bundled reference profile is a small synthetic feasibility model, not a release
+model.
+
+## What it does
+
 Local-first image and offline-video cutout provider for Plebian OS / Kilix
 0.2.1. The repository is a clean-room Apache-2.0 implementation. Development
 is published on the `work/0.2.1-f108` ref. That work-ref publication transports
@@ -14,22 +29,17 @@ editable-mask boundary. It exercises bounded decode, first-class masks,
 compositing, cancellation, batching, atomic output, and offline video before a
 release model is selected.
 
-The carrier is pinned exactly to
-`kilix-f108-f115-contracts==0.2.1.dev5`, wheel SHA-256
-`73ce62f29329d6f1999aa79a765c44476d323641a9e2f7f5b73387735d387e4e`,
-and public manifest SHA-256
-`803a5661a708b366b1d26884a4cf52d45c71dac58926e8216eb69aa902cbd25c`.
-That package is a candidate, not a G5b freeze or acceptance. The F108 return is
-conditional on those exact bytes and must be rerun if they change before
-freeze.
+- Removes an image background to a cutout, mask or composite, singly or as a
+  resumable ordered batch.
+- Runs offline video jobs to transparent MOV or WebM, matte, composite image or
+  video, or GIF, after an explicit estimate and confirmation.
+- Decodes every image in a disposable, resource-capped process and commits
+  outputs atomically with private permissions.
+- Serves the F115 editable-mask consumer through a length-framed provider port.
 
-The reference profile is deliberately impossible to mistake for a qualified
-model. Normal commands fail closed unless `--reference-profile` is supplied.
-No model bytes are mirrored here. Production model selection, F100
-user-supplied acquisition, F106 profiles, shared ONNX Runtime packaging and
-H1/H2/H3 qualification remain separate release gates.
+## Quick start
 
-## Development
+### Development
 
 The repository requires the release-frozen `uv` 0.12.5 executable with
 SHA-256 `b65f23a420c4acc96427efb30e5ed9bc0f7e25d2d712000f6ede77c1a0de5f46`.
@@ -63,139 +73,99 @@ No application path opens a listener or downloads a runtime/model. Product
 integration with the Kilix host, `kilix-content`, F106 and Plebian OS is not
 present on this branch.
 
-## Product surfaces
+### Run
 
-Image header/EXIF inspection and full decoding both run in disposable spawned
-processes. The default parser budget is 30 seconds of CPU time, 30 seconds of
-wall time and 2 GiB of address space. The long-lived side accepts only a 4 KiB
-closed JSON status record and an exact-size, mode-`0600`, metadata-free RGBA
-raster; it never unpickles child data or reparses a child-generated image.
-Image and video outputs use verified `0600` sibling staging files and a
-no-replace atomic commit.
-
-The offline-video command has an explicit estimate/confirmation join. The first
-call produces no destination and returns the confirmation digest:
+After `make setup`, the five executables are in `.venv/bin`:
 
 ```sh
-kilix-background-remover video INPUT OUTPUT \
-  --output-kind matte
+.venv/bin/kilix-background-remover doctor --json
+.venv/bin/kilix-background-remover image subject.png \
+  --output-dir out --reference-profile
 ```
 
-The second call must repeat the same source and settings and supply that exact
-digest:
+## Usage
 
-```sh
-kilix-background-remover video INPUT OUTPUT \
-  --output-kind matte \
-  --confirm-estimate CONFIRMATION_SHA256 \
-  --reference-profile
+| Command | What it does |
+|---|---|
+| `kilix-background-remover image INPUT --output-dir DIR` | One image; `--mask-only`, `--webp`, `--composite-color R,G,B,A` or `--composite-image F`. |
+| `kilix-background-remover batch INPUT_DIR --output-dir DIR [--state-dir D]` | An ordered directory batch that can resume. |
+| `kilix-background-remover video INPUT OUTPUT --output-kind KIND` | Estimate a video job; repeat with `--confirm-estimate SHA256` to run it. |
+| `kilix-background-remover run-contract REQUEST.json` | Run one candidate-R5 `/v2` contract request. |
+| `kilix-background-remover measure-contract REQUEST.json --fixture-tier h0\|h1\|h2` | Measure one cold request on an attested capacity fixture. |
+| `kilix-background-remover doctor [--json]` | Decode budgets, video kinds and the candidate manifest identity. |
+| `kilix-background-remover-tui REQUEST.json [--operation video]` | Keyboard TUI with q/Escape cancel and r retry. |
+| `kilix-background-remover-app [--message MSG.json]` | Contained graphical app, or its headless lifecycle form. |
+| `kilix-background-remover-app-bridge`, `kilix-background-remover-provider` | The fixed-operation app bridge and the F115 provider port. |
+
+Commands that run the worker fail closed without `--reference-profile` until a
+release model is selected.
+`KIND` is `transparent-mov`, `transparent-webm`, `matte`, `composite-image`,
+`composite-video` or `gif`. Details: [docs/product-surfaces.md](docs/product-surfaces.md).
+
+## How it works
+
+```
+CLI   TUI   contained app   app bridge   F115 provider port
+  \     \         |             /             /
+   BackgroundRemovalProvider: one facade, one supervised worker
+        |                                   |
+  disposable decode processes         video: /usr/bin/ffmpeg adapter,
+  (CPU, wall-time, address caps)      frames lent to the same worker
+        |                                   |
+  mask -> cutout / composite          re-decode and compare every frame
+        \                                   /
+         0600 sibling staging -> verified no-replace atomic commit
 ```
 
-All required output profiles are implemented (`6/6`): `transparent-mov`,
-`transparent-webm`, `matte`, `composite-image`, `composite-video`, and `gif`.
-The composite profiles require `--background-image` or `--background-video`,
-respectively. GIF uses a disclosed hard alpha threshold and requires
-`--no-audio` when the source has audio. Audio is preserved by default for the
-other capable profiles; `--no-audio` explicitly removes it. Temporal smoothing,
-scene-cut isolation, batch overlap/resume, raw-frame mode, VFR timestamps and
-rotation are handled locally by the fixed `/usr/bin/ffmpeg` adapter. Smoothing
-uses a fixed 1 MiB accumulator independent of temporal radius. Before atomic
-publication, the staged carrier is decoded again and its authoritative mask,
-alpha, or RGB plane is compared with every rendered frame; a metadata-valid but
-pixel-wrong encoder result is refused.
+The carrier is pinned exactly to
+`kilix-f108-f115-contracts==0.2.1.dev5`, wheel SHA-256
+`73ce62f29329d6f1999aa79a765c44476d323641a9e2f7f5b73387735d387e4e`,
+and public manifest SHA-256
+`803a5661a708b366b1d26884a4cf52d45c71dac58926e8216eb69aa902cbd25c`.
+That package is a candidate, not a G5b freeze or acceptance. The F108 return is
+conditional on those exact bytes and must be rerun if they change before
+freeze.
 
-The installed wheel exposes 5/5 executables/surfaces:
+The reference profile is deliberately impossible to mistake for a qualified
+model. Normal commands fail closed unless `--reference-profile` is supplied.
+No model bytes are mirrored here. Production model selection, F100
+user-supplied acquisition, F106 profiles, shared ONNX Runtime packaging and
+H1/H2/H3 qualification remain separate release gates.
 
-```text
-kilix-background-remover                 image, batch and video CLI
-kilix-background-remover-tui             keyboard TUI for image/video requests
-kilix-background-remover-app             contained graphical app and headless lifecycle
-kilix-background-remover-app-bridge      bounded command-free app bridge
-kilix-background-remover-provider        length-framed F115 provider port
-```
+## Documentation
 
-All 5/5 enter the same provider façade. The per-frame video adapter is lent the
-provider's existing supervised worker; it does not create a second inference
-path. `kilix-background-remover doctor --json` reports the installed decode
-budgets, the 6/6 video kinds and the exact candidate manifest identity. Its
-inference working-set control covers each source pixel exactly once in
-deterministic row-major 2-D tiles of at most 1,048,576 pixels. The reported
-release tiling phases, seam policy and RSS threshold remain unset and the
-provider remains explicitly unqualified until the release owner selects them.
+- [docs/product-surfaces.md](docs/product-surfaces.md): bounded decode, video
+  confirmation and profiles, the five executables, RSS measurement, the
+  capacity fixture contract, the TUI, the app, and the F115 mask consumer.
+- [docs/F115-PROVIDER-PORT-v1.md](docs/F115-PROVIDER-PORT-v1.md): the exact
+  byte protocol of the provider port.
+- [contracts/README.md](contracts/README.md): the frozen F108/F115 contracts.
+- [tests/fixtures/README.md](tests/fixtures/README.md): the synthetic corpus.
+- [evidence/0.2.1-product-return-r1/README.md](evidence/0.2.1-product-return-r1/README.md):
+  the recorded product-return evidence.
+- [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-Installed qualification code can measure an explicitly selected Linux process
-tree without selecting a release ceiling:
+## Related repositories
 
-```python
-import os
+- [kilix-image-shop](https://github.com/itsmygithubacct/kilix-image-shop#readme):
+  the F115 image editor core whose editable-mask operation this provider serves.
+- [kilix](https://github.com/itsmygithubacct/kilix#readme): carries the Kilix
+  for Windows WSL catalog entry.
 
-from kilix_background_remover.rss import ProcessTreeRssMonitor
+## Part of Plebian-OS
 
-with ProcessTreeRssMonitor(os.getpid()) as monitor:
-    outcome = provider.run(request)
-measurement = monitor.measurement
-```
+Kilix Background Remover is one of the repositories behind
+[Plebian-OS](https://github.com/itsmygithubacct/plebian-os#readme), a Debian
+install whose desktop is [Kilix](https://github.com/itsmygithubacct/kilix#readme)
+running the [Kilix 95](https://github.com/itsmygithubacct/kilix-95#readme)
+desktop through [Pleb](https://github.com/itsmygithubacct/pleb#readme).
+It does not ship in Plebian-OS; only the Kilix for Windows preview's WSL
+catalog lists it, without a cutout model. The map of every repository and how
+it ships is on the
+[components page](https://github.com/itsmygithubacct/plebian-os/blob/main/docs/components.md).
 
-The measurement is sampled aggregate `VmRSS` for the named root and observed
-descendants. Every sampled PID is rebound to its Linux proc-stat start time
-before and after the RSS read: root PID reuse is refused, and reused or
-reparented descendants are omitted. Provider identity leaves both the release
-measurement scope and threshold unset; the mechanism by itself supplies 0/1
-D14 release verdicts.
+## License
 
-The F100-C0 H0/H1/H2 fixture contract is also pinned into provider identity as
-3/3 frozen tiers. `measure-contract` first attests every property observable
-inside the declared fixture and refuses a mismatched runtime before starting a
-window. Every completed window publishes the complete `/proc/loadavg` line at
-both boundaries (2/2), including the mandatory H2 pair, plus elapsed monotonic
-time and peak process-tree RSS:
-
-```sh
-kilix-background-remover measure-contract request.json \
-  --fixture-tier h2 --reference-profile > measurement.json
-```
-
-That command always reports the bundled feasibility profile as unqualified and
-awards 0/1 release-acceptance credit. It does not substitute its 0/4 quality
-metrics for the missing licensed corpus, real profile, frozen quality floor, or
-release-owner qualification decisions.
-
-The TUI accepts either a canonical candidate-R5 image request or a fixed-field
-video request. It exposes q/Escape cancellation and r retry, and reports the
-decode/model/backend/resource policy before work starts:
-
-```sh
-kilix-background-remover-tui image-request.json --reference-profile
-kilix-background-remover-tui video-request.json \
-  --operation video --reference-profile
-```
-
-`kilix-background-remover-app` opens the contained graphical client. The same
-controller has a display-independent lifecycle form used for installed package
-qualification:
-
-```sh
-kilix-background-remover-app --message app-message.json --reference-profile
-```
-
-The bridge accepts only fixed operations and typed paths. It accepts 0/7 shell
-commands, environment variables, model URLs, download URLs, import names,
-listener addresses or remote schema URLs.
-
-`kilix_background_remover.editable_mask` is the in-repository pane-4 reference
-consumer for F115. `consume_editable_mask_transcript` validates the full
-candidate-R5 `/v2` transcript, all request/result identity joins and the exact
-bounded gray8 foreground-alpha PNG before `EditableMaskDocument` atomically
-attaches one full-source-geometry mask. Accepted cancellation leaves the
-document unchanged, and provider-controlled prose is never rendered.
-`run_reference_editable_mask_operation` is the executable in-repository harness:
-it submits a real composited layer through the supervised provider, retains the
-reported threshold/feather settings, validates the resulting transcript and
-commits only a sealed, sample-digest-revalidated immutable mask plan.
-
-The separately installed F115 consumer does not import those implementation
-modules. It uses `kilix-background-remover-provider`, whose exact byte protocol
-is specified in [docs/F115-PROVIDER-PORT-v1.md](docs/F115-PROVIDER-PORT-v1.md).
-The port provides discovery, canonical request/progress/terminal transport,
-durable cancellation, and owned-session teardown. F108 supplies that port;
-the external F108-to-F115 Gate 8 disposition remains F115-owned at 0/1.
+Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE) (Copyright 2026
+itsmygithubacct). Third-party notices are in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
